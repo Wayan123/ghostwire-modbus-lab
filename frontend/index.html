@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>GhostWire | Simulation lab</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+  <header class="masthead">
+    <div class="brand">GhostWire <span> / haunted factory training lab</span></div>
+    <div class="safety-label">SIMULATION ONLY <span>·</span> READ-ONLY MODBUS</div>
+  </header>
+  <main id="workspace" class="page">
+    <div class="intro">
+      <div><p class="eyebrow">CONTROL ROOM / SIMULATED MODBUS TCP</p><h1>Investigate the signal.</h1><p class="lede">A factory signal is in question. Read the simulator, inspect the evidence, adjust a setting, and retest.</p></div>
+      <p class="scope-note"><strong>Controlled environment</strong><br>Requests go only to the local simulator. No physical devices, network scanning, or Modbus writes.</p>
+    </div>
+    <div class="layout">
+      <section class="panel setup" aria-labelledby="setup-title">
+        <div class="section-heading"><div><p class="eyebrow">01 / CONFIGURE</p><h2 id="setup-title">Test setup</h2></div></div>
+        <p class="muted">Choose a case and compare the request with its simulator documentation.</p>
+        <div id="load-message" class="notice" role="status">Loading scenarios…</div>
+        <button id="retry-load" class="secondary" type="button" hidden>Retry loading scenarios</button>
+        <div id="setup-content" hidden>
+          <label for="scenario">Training scenario</label>
+          <select id="scenario"></select>
+          <p id="scenario-summary" class="scenario-summary"></p>
+          <details class="documentation" open><summary>Simulator documentation</summary><div id="documentation" class="doc-content"></div></details>
+          <form id="test-form">
+            <fieldset id="request-fields"><legend>Read request</legend>
+              <div class="fields">
+                <div><label for="unit_id">Unit ID</label><input id="unit_id" name="unit_id" type="number" min="1" max="247" step="1" required></div>
+                <div><label for="function_code">Function code</label><select id="function_code" name="function_code"><option value="3">03 · Holding registers</option><option value="4">04 · Input registers</option></select></div>
+                <div><label for="address">Address</label><input id="address" name="address" type="number" min="0" max="65535" step="1" required></div>
+                <div><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" max="125" step="1" required></div>
+                <div class="field-wide"><label for="scale">Scale multiplier</label><input id="scale" name="scale" type="number" min="0" step="any" required aria-describedby="scale-help"><p id="scale-help" class="field-help">Must be greater than zero. Applied to the returned register value for interpretation.</p></div>
+              </div>
+            </fieldset>
+            <button id="run-test" class="primary" type="submit">Run simulated read</button>
+            <p id="test-message" class="form-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+      <div class="results-column">
+        <section class="panel evidence" aria-labelledby="evidence-title">
+          <div class="section-heading"><div><p class="eyebrow">02 / EXAMINE</p><h2 id="evidence-title">Evidence &amp; interpretation</h2></div><span id="result-status" class="status">Awaiting read</span></div>
+          <div id="empty-result" class="empty-state"><strong>No read yet</strong><p>Run a simulated read to see the response and investigation notes here.</p></div>
+          <div id="result" hidden>
+            <div class="reading"><div><span class="reading-label">ENGINEERING VALUE</span><strong id="engineering-value">Not returned</strong><span class="reading-caption">Simulated measurement</span></div><div class="raw-reading"><span class="reading-label">RAW REGISTERS</span><strong id="raw-registers">Not returned</strong></div></div>
+            <div class="evidence-grid">
+              <section><h3>Observations <span>Protocol evidence</span></h3><ul id="observations"></ul></section>
+              <section><h3>Possible causes <span>Hypotheses, not proof</span></h3><ul id="possible_causes"></ul></section>
+              <section><h3>Training hints</h3><ul id="training_hints"></ul></section>
+              <section><h3>Next steps</h3><ul id="next_steps"></ul></section>
+            </div>
+            <div class="verification"><span class="reading-label">VERIFICATION</span><p id="verified"></p></div>
+            <section class="explanation"><div class="explanation-heading"><h3>Explanation</h3><span id="explanation-source" class="source"></span></div><p id="explanation"></p></section>
+          </div>
+        </section>
+        <section class="panel history" aria-labelledby="history-title">
+          <div class="section-heading"><div><p class="eyebrow">03 / REVIEW</p><h2 id="history-title">Case history</h2></div><button id="print-report" class="secondary" type="button" disabled>Print report</button></div>
+          <p id="history-scenario" class="history-scenario"></p>
+          <p class="muted">Recorded in this browser session. Selecting another scenario clears this case.</p>
+          <p id="history-empty" class="empty-history">No tests recorded. Each completed read will appear here.</p>
+          <ol id="history-list" class="history-list"></ol>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer>GhostWire training lab <span>·</span> All values shown are simulated.</footer>
+</body>
+</html>
