@@ -1,5 +1,18 @@
 # Verification record
 
+## Browser audit fixes after v1.0.0 (task 15), 2026-11-11
+
+- Harness: `tools/dotnet run --project csharp/GhostWire.Tests/GhostWire.Tests.csproj` printed `All GhostWire protocol and HTTP checks passed.` (PBT seed 1616322598, 26673 check calls).
+- Windows Chrome 157 headless, driven over the DevTools protocol by a temporary script outside the repository (deleted afterwards), against the C# server on loopback port 8765, passed 28 of 28 checks:
+  - `/favicon.svg` returned 200 `image/svg+xml`. The session had no HTTP 4xx or 5xx responses and no console errors, warnings or exceptions.
+  - The traffic log had no "Select" button and no "Answer" column. Its 12 buttons were the "Show frames" toggles, and each opened a full-width row with 2 hex frames.
+  - Times showed as `HH:MM:SS` on one line at 1440 px, with the full ISO timestamp in the title and in visually hidden text. The table (858 px) fitted its container at 1440 px.
+  - Unit ID 999, address 70000, quantity 0 and scale 0 each sent no `/api/test` request. Each set `aria-invalid="true"`, focused the field and showed the range message, for example "Unit ID must be a whole number from 1 to 247. Nothing was sent." A valid read afterwards was sent and completed.
+  - Two wrong answers showed no hint. The 3rd showed training hint 1 and the 4th added hint 2. Wrong answers did not mark a row and the status message did not contain `1111` or `MAINT`. The typed answer `1111` / `MAINT-LAPTOP-07` verified, marked one row and hid the hints.
+  - At 360 px, document and body scroll width were 360 with Phantom Writer selected and frames open. The log scrolled inside its labeled `role="region"` (`tabindex="0"`) and the scroll note was visible.
+  - The guided-tour button selected The Silent Sensor (`unit-id`) and focused the case picker. Dismissal persisted across a reload. Under emulated `prefers-reduced-motion: reduce` the banner had no transition or animation.
+- Not checked in this run: a real screen reader, print preview and browsers other than Chrome.
+
 ## ot-security-lab feature (frame inspector, Phantom Writer, categories, property tests), 2026-11-11
 
 Observed in the local WSL environment using Windows .NET SDK 8.0.427 through `tools/dotnet`.

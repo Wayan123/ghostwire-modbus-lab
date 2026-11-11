@@ -30,6 +30,44 @@ function validateScale() {
   input.setCustomValidity(input.value !== '' && Number(input.value) <= 0 ? 'Scale must be greater than zero.' : '');
 }
 
+// Client-side bounds mirror the server whitelist for POST /api/test. The server still validates every field.
+const fieldRules = {
+  unit_id: [1, 247, true, 'Unit ID must be a whole number from 1 to 247.'],
+  address: [0, 65535, true, 'Address must be a whole number from 0 to 65535.'],
+  quantity: [1, 125, true, 'Quantity must be a whole number from 1 to 125.'],
+  scale: [0, 1000000, false, 'Scale must be a number greater than 0 and at most 1,000,000.'],
+};
+
+function requestProblem() {
+  for (const [field, [min, max, integer, message]] of Object.entries(fieldRules)) {
+    const raw = $(field).value.trim();
+    const value = Number(raw);
+    const ok = raw !== '' && Number.isFinite(value) && value <= max && (integer ? Number.isInteger(value) && value >= min : value > min);
+    if (!ok) return { field, message };
+  }
+  if (Number($('address').value) + Number($('quantity').value) > 65536) {
+    return { field: 'quantity', message: 'Address plus quantity must not go past register 65535.' };
+  }
+  return null;
+}
+
+function setInvalid(field, invalid) {
+  const input = $(field);
+  const described = (input.getAttribute('aria-describedby') || '').split(' ').filter((id) => id && id !== 'test-message');
+  if (invalid) {
+    input.setAttribute('aria-invalid', 'true');
+    described.push('test-message');
+  } else {
+    input.removeAttribute('aria-invalid');
+  }
+  if (described.length) input.setAttribute('aria-describedby', described.join(' '));
+  else input.removeAttribute('aria-describedby');
+}
+
+function clearInvalid() {
+  for (const field of Object.keys(fieldRules)) setInvalid(field, false);
+}
+
 function verifiedText(value) {
   if (value === true) return 'Verified by this simulated test.';
   if (value === false) return 'Not verified by this simulated test.';
@@ -77,6 +115,7 @@ function selectScenario() {
   const latest = history[history.length - 1];
   for (const field of fields) $(field).value = latest?.request?.[field] ?? scenario.initial[field];
   validateScale();
+  clearInvalid();
   if (latest) {
     renderResult(latest);
   } else {
@@ -139,6 +178,7 @@ async function loadScenarios() {
     selectScenario();
     $('setup-content').hidden = false;
     $('load-message').hidden = true;
+    showTour();
   } catch (error) {
     $('load-message').textContent = `Could not load scenarios: ${error.message}`;
     $('load-message').dataset.state = 'error';
@@ -326,6 +366,7 @@ async function showIncident(scenario) {
   $('answer-result').hidden = true;
   const attempts = answerHistory.get(scenario.id) || [];
   if (attempts.length) renderAnswer(attempts[attempts.length - 1]);
+  renderAnswerHints(scenario.id);
   if (incidentLogs.has(scenario.id)) { renderLog(scenario.id); return; }
   $('log-body').replaceChildren();
   $('log-note').textContent = 'Loading the simulated capture…';
@@ -354,34 +395,80 @@ function renderLog(scenarioId) {
       seq.append(document.createElement('br'));
       addText(seq, 'strong', '⚠ Unauthorized write', 'flag');
     }
-    addText(row, 'td', text(entry.time));
+    const timeCell = document.createElement('td');
+    const iso = text(entry.time);
+    const clock = /T(\d{2}:\d{2}:\d{2})/.exec(iso);
+    if (clock) {
+      // Short visible time; the full ISO timestamp is in the title and read by screen readers.
+      const time = addText(timeCell, 'time', clock[1]);
+      time.dateTime = iso;
+      time.title = iso;
+      time.setAttribute('aria-hidden', 'true');
+      addText(timeCell, 'span', iso, 'visually-hidden');
+    } else {
+      timeCell.textContent = iso;
+    }
+    row.append(timeCell);
     addText(row, 'td', text(entry.client));
     addText(row, 'td', text(entry.transaction_id));
     addText(row, 'td', text(entry.unit_id));
-    addText(row, 'td', `${String(entry.function_code).padStart(2, '0')} · ${text(entry.function_name)}`);
+    addText(row, 'td', `${String(entry.function_code).padStart(2, '0')} · ${text(entry.function_name)}`, 'wrap');
     addText(row, 'td', text(entry.address));
     addText(row, 'td', text(entry.values));
+    // Frames open in a full-width row below the entry instead of inside a narrow cell.
+    const framesRow = document.createElement('tr');
+    framesRow.className = 'frames-row';
+    framesRow.id = `log-frames-${text(entry.sequence)}`;
+    framesRow.hidden = true;
     const framesCell = document.createElement('td');
-    const details = document.createElement('details');
-    addText(details, 'summary', `Frames for transaction ${text(entry.transaction_id)}`);
-    const frames = document.createElement('div');
-    details.append(frames);
-    details.addEventListener('toggle', () => { if (details.open && !frames.childElementCount) renderFrames(frames, entry.frames, `log-${entry.sequence}`); });
-    framesCell.append(details);
-    row.append(framesCell);
-    const actionCell = document.createElement('td');
-    const select = addText(actionCell, 'button', 'Select');
-    select.type = 'button';
-    select.className = 'secondary';
-    select.setAttribute('aria-label', `Select transaction ${text(entry.transaction_id)} from ${text(entry.client)} for your answer`);
-    select.addEventListener('click', () => {
-      $('answer-transaction').value = entry.transaction_id;
-      $('answer-client').value = entry.client;
-      $('log-message').textContent = `Transaction ${text(entry.transaction_id)} from ${text(entry.client)} copied into the answer form.`;
+    framesCell.colSpan = 9;
+    framesRow.append(framesCell);
+    const toggleCell = document.createElement('td');
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'secondary';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', framesRow.id);
+    const setToggleLabel = (open) => {
+      toggle.replaceChildren(open ? 'Hide frames' : 'Show frames');
+      addText(toggle, 'span', ` for transaction ${text(entry.transaction_id)}`, 'visually-hidden');
+    };
+    setToggleLabel(false);
+    toggle.addEventListener('click', () => {
+      const open = framesRow.hidden;
+      if (open && !framesCell.childElementCount) {
+        addText(framesCell, 'p', `Frames for transaction ${text(entry.transaction_id)} (simulated capture)`, 'frames-title');
+        const frames = document.createElement('div');
+        framesCell.append(frames);
+        renderFrames(frames, entry.frames, `log-${entry.sequence}`);
+      }
+      framesRow.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      setToggleLabel(open);
     });
-    row.append(actionCell);
-    body.append(row);
+    toggleCell.append(toggle);
+    row.append(toggleCell);
+    body.append(row, framesRow);
   }
+}
+
+// Progressive training hints, kept client-side: none for the first 2 unverified answers,
+// hint 1 from the 3rd, hint 2 from the 4th. Hidden once an answer is verified. They never name the row.
+const answerHints = [
+  'Look at the Function column: which entry changes data instead of reading it?',
+  'Compare the value read before and after each entry.',
+];
+const hintThreshold = 3;
+
+function renderAnswerHints(scenarioId) {
+  const attempts = answerHistory.get(scenarioId) || [];
+  const wrong = attempts.filter((entry) => entry.verified !== true).length;
+  const shown = attempts.some((entry) => entry.verified === true) ? 0 : Math.max(0, Math.min(answerHints.length, wrong - hintThreshold + 1));
+  const list = $('answer-hint-list');
+  list.replaceChildren();
+  answerHints.slice(0, shown).forEach((hint, index) => addText(list, 'li', `Training hint ${index + 1}: ${hint}`));
+  $('answer-hints').hidden = shown === 0;
+  return shown;
 }
 
 function renderAnswer(result) {
@@ -447,15 +534,17 @@ $('answer-form').addEventListener('submit', async (event) => {
     const result = await api('/api/incident/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
     if (!result.answer) result.answer = request;
     const attempts = answerHistory.get(scenario.id) || [];
+    const hintsBefore = renderAnswerHints(scenario.id);
     attempts.push(result);
     answerHistory.set(scenario.id, attempts);
     if (result.verified === true) verifiedTransaction.set(scenario.id, result.answer.transaction_id);
     renderAnswer(result);
     if (incidentLogs.has(scenario.id)) renderLog(scenario.id);
     renderAnswerHistory();
+    const hintsAfter = renderAnswerHints(scenario.id);
     $('test-message').textContent = result.verified === true
       ? 'Answer verified by the simulated capture. The matching log row is now marked "Unauthorized write".'
-      : 'Answer not verified by the simulated capture. Review the log and try again.';
+      : `Answer not verified by the simulated capture. Review the log and try again.${hintsAfter > hintsBefore ? ` Training hint ${hintsAfter}: ${answerHints[hintsAfter - 1]}` : ''}`;
   } catch (error) {
     $('test-message').textContent = `Answer failed: ${error.message}`;
     $('test-message').dataset.state = 'error';
@@ -468,13 +557,44 @@ $('answer-form').addEventListener('submit', async (event) => {
 
 $('scenario').addEventListener('change', selectScenario);
 $('scale').addEventListener('input', validateScale);
+for (const field of Object.keys(fieldRules)) $(field).addEventListener('input', () => setInvalid(field, false));
+
+// Guided tour banner for first-time visitors. Dismissal is remembered in localStorage when available.
+const tourKey = 'ghostwire.tourDismissed';
+const tourScenario = 'unit-id';
+function tourDismissed() {
+  try { return localStorage.getItem(tourKey) === '1'; } catch { return false; }
+}
+function showTour() {
+  $('tour').hidden = tourDismissed() || !scenarios.some((item) => item.id === tourScenario);
+}
+$('tour-start').addEventListener('click', () => {
+  if (running || !scenarios.some((item) => item.id === tourScenario)) return;
+  $('scenario').value = tourScenario;
+  selectScenario();
+  $('test-message').textContent = 'The Silent Sensor is selected. Run the initial simulated read, then inspect the evidence.';
+  $('scenario').focus();
+});
+$('tour-dismiss').addEventListener('click', () => {
+  try { localStorage.setItem(tourKey, '1'); } catch { /* Storage unavailable: dismiss for this page only. */ }
+  $('tour').hidden = true;
+  $('scenario').focus();
+});
 $('retry-load').addEventListener('click', loadScenarios);
 $('print-report').addEventListener('click', () => window.print());
 $('test-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (running) return;
   validateScale();
-  if (!$('test-form').reportValidity()) return;
+  const problem = requestProblem();
+  clearInvalid();
+  if (problem) {
+    setInvalid(problem.field, true);
+    $('test-message').textContent = `${problem.message} Nothing was sent.`;
+    $('test-message').dataset.state = 'error';
+    $(problem.field).focus();
+    return;
+  }
   const request = { scenario_id: $('scenario').value };
   for (const field of fields) request[field] = Number($(field).value);
   running = true;

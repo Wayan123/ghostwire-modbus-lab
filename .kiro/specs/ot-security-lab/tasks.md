@@ -101,7 +101,7 @@ Run the harness after every task from the repository root: `tools/dotnet run --p
   - _Requirements: 1.8, 1.9, 1.10, 1.11_
 
 - [x] 12. Frontend: traffic log and answer form
-  - Fetch and render the log as a `<table>` with column headers, a per-row "Select" button that fills the answer form, and per-row frames using the Wire evidence renderer; show the capture note.
+  - Fetch and render the log as a `<table>` with column headers, a per-row "Select" button that fills the answer form, and per-row frames using the Wire evidence renderer; show the capture note. (Superseded by task 15: the "Select" button was removed.)
   - Add the answer form with client-side constraints matching the server, render the answer evidence and the "Next steps · real-world guidance, not verified by this simulation" list, and announce results through the existing `role="status"` region.
   - Mark the offending row with "⚠ Unauthorized write" text and a pattern only after a verified answer; keep it keyboard reachable.
   - Add answer attempts to case history and the print report.
@@ -120,3 +120,12 @@ Run the harness after every task from the repository root: `tools/dotnet run --p
   - Ask the `ot-security-reviewer` agent to review the diff against `safety.md`; resolve findings.
   - Re-read every acceptance criterion and mark any that were not verified.
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 7.3, 7.4_
+
+- [x] 15. Fixes from the v1.0.0 judge-style browser audit (frontend only, no server change)
+  - Remove the per-row "Select" auto-fill from the traffic log; the learner types the transaction ID and client label. Each row keeps a keyboard-reachable "Show frames" toggle that opens the frames in a full-width row.
+  - Show client-side progressive training hints after 3 and 4 unverified answers; hide them once an answer is verified. Hints never name the row.
+  - Serve `frontend/favicon.svg` through the existing static handler and link it from `index.html`.
+  - Validate read settings before sending: on an out-of-range field send nothing, set `aria-invalid`, focus the field, and state the range in the `test-message` status region.
+  - Log table: HH:MM:SS time with the full ISO timestamp in a title and visually hidden text; no wrapping at 1440 px; horizontal scroll inside a labeled, focusable region on narrow screens. The FC06 row is still marked only after a verified answer.
+  - Add a dismissible guided-tour banner whose button selects The Silent Sensor; remember dismissal in localStorage.
+  - _Requirements: 2.13, 2.15, 3.3_

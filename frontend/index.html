@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>GhostWire | Simulation lab</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -15,6 +16,13 @@
     <div class="safety-label">SIMULATION ONLY <span>·</span> READ-ONLY MODBUS</div>
   </header>
   <main id="workspace" class="page">
+    <section id="tour" class="tour" aria-labelledby="tour-title" hidden>
+      <p><strong id="tour-title">Guided tour.</strong> New here? Start with The Silent Sensor, then try Phantom Writer.</p>
+      <div class="tour-actions">
+        <button id="tour-start" class="secondary" type="button">Start with The Silent Sensor</button>
+        <button id="tour-dismiss" class="link-button" type="button" aria-label="Dismiss the guided tour">Dismiss</button>
+      </div>
+    </section>
     <div class="intro">
       <div><p class="eyebrow">CONTROL ROOM / SIMULATED MODBUS TCP</p><h1>Investigate the signal.</h1><p class="lede">A factory signal is in question. Read the simulator, inspect the evidence, adjust a setting, and retest.</p></div>
       <p class="scope-note"><strong>Local training environment</strong><br>Protocol reads reach only a simulator on this computer. No physical devices, network scanning, or Modbus writes.</p>
@@ -38,14 +46,14 @@
           <select id="scenario" aria-describedby="scenario-summary"></select>
           <p id="scenario-summary" class="scenario-summary"></p>
           <details class="documentation" open><summary>Inspect simulated device documentation</summary><div id="documentation" class="doc-content"></div></details>
-          <form id="test-form">
+          <form id="test-form" novalidate>
             <fieldset id="request-fields"><legend>Read request settings</legend>
               <div class="fields">
                 <div><label for="unit_id">Unit ID</label><input id="unit_id" name="unit_id" type="number" min="1" max="247" step="1" required></div>
                 <div><label for="function_code">Function code</label><select id="function_code" name="function_code"><option value="3">03 · Holding registers</option><option value="4">04 · Input registers</option></select></div>
                 <div><label for="address">Address</label><input id="address" name="address" type="number" min="0" max="65535" step="1" required></div>
                 <div><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" max="125" step="1" required></div>
-                <div class="field-wide"><label for="scale">Scale multiplier</label><input id="scale" name="scale" type="number" min="0" step="any" required aria-describedby="scale-help"><p id="scale-help" class="field-help">Must be greater than zero. Applied to the returned register value for interpretation.</p></div>
+                <div class="field-wide"><label for="scale">Scale multiplier</label><input id="scale" name="scale" type="number" min="0" max="1000000" step="any" required aria-describedby="scale-help"><p id="scale-help" class="field-help">Must be greater than zero and at most 1,000,000. Applied to the returned register value for interpretation.</p></div>
               </div>
             </fieldset>
             <button id="run-test" class="primary" type="submit">Run simulated read</button>
@@ -86,12 +94,12 @@
         <section id="incident-panel" class="panel incident" aria-labelledby="log-title" hidden>
           <div class="section-heading"><div><p class="eyebrow">02B / INVESTIGATE THE CAPTURE</p><h2 id="log-title">Simulated traffic log</h2></div></div>
           <p id="log-note" class="notice"></p>
-          <p class="muted">FC03 reads holding registers. FC06 (Write Single Register) changes one holding register. Find the entry that changed the setpoint, then select it and submit its transaction ID and client label.</p>
-          <p id="log-message" class="form-message" role="status" aria-live="polite"></p>
-          <div class="table-scroll">
+          <p class="muted">FC03 reads holding registers. FC06 (Write Single Register) changes one holding register. Find the entry that changed the setpoint, then type its transaction ID and client label into the answer form below.</p>
+          <p class="muted scroll-note">Scroll the table sideways to see every column.</p>
+          <div class="table-scroll" role="region" aria-labelledby="log-caption" tabindex="0">
             <table id="log-table" class="log-table">
-              <caption>Simulated capture, one row per Modbus transaction</caption>
-              <thead><tr><th scope="col">Seq</th><th scope="col">Simulated time</th><th scope="col">Client label</th><th scope="col">Transaction ID</th><th scope="col">Unit ID</th><th scope="col">Function</th><th scope="col">Address</th><th scope="col">Value(s)</th><th scope="col">Frames</th><th scope="col">Answer</th></tr></thead>
+              <caption id="log-caption">Simulated capture, one row per Modbus transaction (times in UTC)</caption>
+              <thead><tr><th scope="col">Seq</th><th scope="col">Simulated time</th><th scope="col">Client label</th><th scope="col">Transaction ID</th><th scope="col">Unit ID</th><th scope="col">Function</th><th scope="col">Address</th><th scope="col">Value(s)</th><th scope="col">Frames</th></tr></thead>
               <tbody id="log-body"></tbody>
             </table>
           </div>
@@ -104,6 +112,10 @@
             </fieldset>
             <button id="submit-answer" class="primary" type="submit">Submit answer</button>
           </form>
+          <section id="answer-hints" class="answer-hints" aria-labelledby="answer-hints-title" hidden>
+            <h3 id="answer-hints-title">Training hints <span>Shown after 3 answers that were not verified. Specific to this simulated case.</span></h3>
+            <ol id="answer-hint-list"></ol>
+          </section>
           <div id="answer-result" class="answer-result" hidden>
             <p id="answer-status" class="status">Answer</p>
             <div class="evidence-grid">

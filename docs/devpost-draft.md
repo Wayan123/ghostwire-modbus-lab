@@ -6,7 +6,7 @@
 - **Tagline:** Investigate dead sensors and phantom setpoint writes on real Modbus TCP, safely, with a Kiro-built forensic lab.
 - **Category:** Frankenstein
 - **Repo:** https://github.com/Wayan123/ghostwire-modbus-lab
-- **App / test build:** GitHub Release `v1.0.0` (Windows zip). _URL TBD_
+- **App / test build:** https://github.com/Wayan123/ghostwire-modbus-lab/releases/tag/v1.0.0 (Windows x64 zip; needs .NET 8 ASP.NET Core Runtime)
 - **Video:** _YouTube URL TBD_
 - **Bonus:** Social Blitz (_URL_), Blog (_URL_)
 
