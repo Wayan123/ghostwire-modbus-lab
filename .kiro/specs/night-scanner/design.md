@@ -11,7 +11,7 @@ The Night Scanner is the second `security` case. It reuses the Phantom Writer pi
 | `IncidentLogGenerator.GenerateAsync` | Unchanged entry point for Phantom Writer | The connection, recording and decoding loop moves into a shared `CaptureAsync` that also records `timeout` and `exception` entries. Each case keeps its own validation. |
 | `TrafficLogEntry` | Same entry shape | Additive `exception_code` (int or null). `status` can now be `timeout` or `exception`. |
 | `TrainingService.IncidentLog(id)` and `GET /api/incident/{id}/log` | Same route | Logs stored in a dictionary keyed by the fixed security case IDs. |
-| `Diagnosis.ForAnswer` and `POST /api/incident/answer` | Same route and request shape | Dispatches on `log.scenario_id`. New `Diagnosis.AnswerEntry(log)` gives the correct entry per case and drives the existing redaction. Mitigations chosen per case. |
+| `Diagnosis.ForAnswer` and `POST /api/incident/answer` | Same route and request shape | Dispatches on `log.scenario_id`. New `Diagnosis.AnswerEntry(log)` gives the correct entry per case. Every unverified answer returns one identical reply without a log entry. Mitigations chosen per case. |
 | Frontend log table, answer form, progressive hints, row flag | Same components | New Status column. Task text, hints and flag label come from the scenario's `incident` field instead of Phantom Writer constants. |
 
 Device choice: the gateway routes **the same boiler controller at unit 5** as Phantom Writer, here with its normal setpoint 650 (a different simulated night, no write). Reusing the device keeps the documentation familiar and lets the initial read look normal, which is the point of the case: the process value is fine and the evidence is in the network capture.
@@ -20,12 +20,13 @@ Design choices that resolve tensions in the brief:
 
 | Tension | Decision | Reason |
 |---|---|---|
-| "Same bounded timeout as elsewhere" vs. "make timeouts in the generator short" | Every Night Scanner exchange uses a 100 ms probe deadline, bounded by the same cancellation-token mechanism and within the 300 ms Modbus deadline. Learner reads keep 300 ms. The capture note states the 100 ms value. | With the default plan, 8 sweep requests get no reply. At 300 ms that adds 2.4 s to every start and to every property case; at 100 ms it adds 0.8 s. Loopback replies arrive in about 1 ms, so 100 ms leaves a wide margin. |
+| "Same bounded timeout as elsewhere" vs. "make timeouts in the generator short" | Steps expected to get a reply (HMI polls of unit 5, the scan request to unit 5 that returns exception 02, and the scan request to the responding unit) use the 300 ms Modbus deadline. Only scan probes of unit IDs with no device use a 100 ms deadline. Both use the same cancellation-token mechanism. Learner reads keep 300 ms. The capture note states the 100 ms value. (Revised after the session 10 security review; it first used 100 ms for every step, so a slow host could fail startup.) | With the default plan, 8 sweep requests get no reply. At 300 ms that adds 2.4 s to every start and to every property case; at 100 ms it adds 0.8 s. A step that should get a reply gets the full Modbus deadline, so a slow Windows/WSL host does not fail startup. |
 | A timeout must be real, not scripted | An entry is `timeout` only when the generator's deadline expired **and** the simulator recorder reports `Sent == null` for that connection. Any disagreement fails startup. | The log status is evidence from both ends of the exchange, not a constant. |
 | "Exactly one correct answer" must not come from script constants | `Diagnosis.AnswerEntry` derives the scanning client from the log (the only client addressing ≥ 3 distinct unit IDs) and takes its first entry. The generator checks that this equals the plan. | The verified rule depends only on evidence, like Phantom Writer's "values read from log entries". |
 | A property "for any seed" vs. a deterministic production log | `NightScannerPlan.Default` is fixed. `NightScannerPlan.FromSeed(seed)` derives a plan for tests from a SplitMix64 sequence. Both go through the same generator and validation. | Production stays deterministic (Req. 2.8); the property covers many plans. |
 | Hints are case-specific | Hints, task text and the flag label move to an additive `incident` object in `GET /api/scenarios`. | Avoids hard-coding scenario IDs in `app.js` and keeps Phantom Writer's text unchanged. |
-| Answer redaction could hint at the answer | Keep Phantom Writer's rule: redact `log_entry.client` only when the submitted transaction is the answer entry and the answer is not verified. | Same behavior across security cases. The row itself already shows the label. |
+| Answer redaction could hint at the answer | ~~Keep Phantom Writer's rule: redact `log_entry.client` only when the submitted transaction is the answer entry.~~ Revised after the session 10 security review: the redaction and the "client label differs" wording marked the answer row (an answer oracle against Req. 3.6). Every unverified answer in both security cases now gets one identical reply with `log_entry: null`; only the echoed `answer` differs. Progressive hints stay client-side and generic. | The reply must not depend on which part of the pair was wrong. The harness checks this byte for byte for every log entry of both cases. |
+| A step deadline can expire during connect or write | `CaptureAsync` catches step-deadline cancellation around connect and write and rethrows `InvalidOperationException` naming the step and its deadline. The "5 s startup deadline" message is kept only for cancellation of the outer token. | The startup error names the real cause. |
 
 Out of scope: writes of any kind in the Night Scanner, Modbus gateway exception codes 0A/0B (the simulator stays silent, as documented in `modbus-protocol.md`), multiple scans per capture, sub-second timestamps.
 
@@ -36,7 +37,7 @@ flowchart LR
   subgraph "Startup (before HTTP)"
     P[NightScannerPlan.Default] --> B[NightScannerScript.Build]
     B -- "IncidentStep[] (FC03 only)" --> C[IncidentLogGenerator.CaptureAsync]
-    C -- "loopback TCP, 100 ms per request" --> G[(Private gateway simulator<br/>unit 5 + unit U, read-only)]
+    C -- "loopback TCP, 300 ms per reply step, 100 ms per absent-unit probe" --> G[(Private gateway simulator<br/>unit 5 + unit U, read-only)]
     G -- "recorder: received / sent bytes" --> C
     C --> V[Night Scanner validation<br/>+ Diagnosis.AnswerEntry]
     V --> L[TrafficLog night-scanner]
@@ -134,21 +135,19 @@ public static DiagnosisResult ForAnswer(TrafficLog log, AnswerRequest answer);  
 
 Scanning client rule: group entries by client label; exactly one label must address ≥ 3 distinct unit IDs, otherwise there is no answer entry and nothing verifies.
 
-Night Scanner branches (observations quote the log, never constants):
+Night Scanner answer results (observations quote the log, never constants):
 
-- No entry with that transaction: "No transaction N appears in this simulated capture."
-- Entry exists, not the answer entry: "In this simulated capture, transaction N from <label> is FC03 · Read Holding Registers to unit U at address A, status <status>." Possible cause: "The submitted pair does not match the first request of a scan in this capture."
-- Answer entry, wrong client: "In this simulated capture, transaction N is FC03 · Read Holding Registers to unit U at address A." plus "The submitted client label differs from the capture's label for this transaction." `log_entry.client` redacted.
+- Every unverified answer, in both security cases and whichever part is wrong (unknown transaction, another entry, or the answer entry with a wrong client): the same reply. Observation "The submitted pair does not match the event this case asks for." One case-level possible cause and next step that do not depend on the submission, no training hint, no mitigations, and `log_entry: null`. Only the echoed `answer` differs.
 - Verified: observations list the client and request count, unit IDs from first to last in increasing order, first and last transaction and time, shortest and longest interval in seconds, counts of timeouts / exceptions (with codes) / responses, the unit that responded, and the unit IDs addressed by every other client. Training hint: in this simulation, a run of reads to increasing unit IDs from one client, mostly unanswered, is a reconnaissance pattern, not normal polling. Next step: compare the responding unit with the simulated device documentation, which lists only unit 5.
 
-`ForRead` keeps all current text. For `night-scanner` the second training hint is: "Training hint: a verified read confirms that unit 5 answers normally in this simulation, not which other clients queried the gateway. Open the simulated traffic log."
+`ForRead` keeps all current text. For `night-scanner` the second training hint is: "Training hint: a verified read confirms that unit 5 answers normally in this simulation, not which other clients queried the gateway. Open the simulated traffic log." A third hint reads: "Training hint: probing many unit IDs yourself with test reads is exactly the behavior this case teaches you to detect in the simulated traffic log."
 
 ### `TrainingService` (changed)
 
 - `Cases` gains `night-scanner` (unit 5, FC03, address 100, value 650, scale 0.1, `°C`, `security`, `intermediate`).
 - `incidentLogs: Dictionary<string, TrafficLog>`; `IncidentLog(id)` looks up only these fixed keys.
 - `Scenarios()` adds `incident` = `{ task, hints[], flag }` for security cases, null otherwise.
-- `AnswerAsync` uses `incidentLogs[answer.scenario_id]`, `Diagnosis.AnswerEntry` for redaction and `MitigationsFor(id)`.
+- `AnswerAsync` uses `incidentLogs[answer.scenario_id]`, `Diagnosis.AnswerEntry` (through `Diagnosis.ForAnswer`) to decide verification, `log_entry` only when verified, and `MitigationsFor(id)`.
 
 ### Frontend
 

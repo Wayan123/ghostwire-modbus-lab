@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using GhostWire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -494,7 +495,14 @@ foreach (var (tx, label, name) in new[] { (1111, "HMI-01", "right transaction, w
     Check(!wrongAnswer.Body.GetRawText().Contains("MAINT-LAPTOP-07"), $"{name} does not reveal the writer's label");
     Check(wrongAnswer.Body.GetProperty("observations").GetArrayLength() >= 1, $"{name} has an observation");
 }
-Check((await Answer(AnswerJson(4242, "X"))).Body.GetProperty("observations")[0].GetString() == "No transaction 4242 appears in this simulated capture.", "missing transaction observation");
+Check((await Answer(AnswerJson(4242, "X"))).Body.GetProperty("observations")[0].GetString() == "The submitted pair does not match the event this case asks for.", "missing transaction gets the shared unverified observation");
+{
+    // Answer oracle: right transaction with a wrong client and a wrong transaction with a real client must give the same reply.
+    var a = await Answer(AnswerJson(1111, "FAKE-CLIENT"));
+    var b = await Answer(AnswerJson(65535, "MAINT-LAPTOP-07"));
+    string Strip(JsonElement body) { var copy = JsonNode.Parse(body.GetRawText())!.AsObject(); copy.Remove("answer"); return copy.ToJsonString(); }
+    Check(Strip(a.Body) == Strip(b.Body) && a.Body.GetProperty("log_entry").ValueKind == JsonValueKind.Null, "HTTP: unverified Phantom Writer answers are identical except the echoed answer");
+}
 
 // The Night Scanner over HTTP: learner read, read-only gateway, log endpoint and answers.
 {
@@ -556,7 +564,36 @@ Check((await Answer(AnswerJson(4242, "X"))).Body.GetProperty("observations")[0].
         if (mustNotReveal) Check(!wrongScan.Body.GetRawText().Contains("ENG-WS-13"), $"Night Scanner {name} does not reveal the scanner label");
         Check(!string.Join(" ", wrongScan.Body.GetProperty("observations").EnumerateArray().Select(o => o.GetString())).Contains("transaction 301") || tx == 301, $"Night Scanner {name} does not name the first transaction");
     }
-    Check((await Answer(ScanJson(301, "HMI-01"))).Body.GetProperty("log_entry").GetProperty("client").GetString() == "(not shown until the answer is verified)", "Night Scanner answer entry label is redacted when unverified");
+    Check((await Answer(ScanJson(301, "HMI-01"))).Body.GetProperty("log_entry").ValueKind == JsonValueKind.Null, "Night Scanner unverified answer carries no log entry");
+    {
+        var a = await Answer(ScanJson(301, "FAKE-CLIENT"));
+        var b = await Answer(ScanJson(65535, "ENG-WS-13"));
+        string Strip(JsonElement body) { var copy = JsonNode.Parse(body.GetRawText())!.AsObject(); copy.Remove("answer"); return copy.ToJsonString(); }
+        Check(Strip(a.Body) == Strip(b.Body), "HTTP: unverified Night Scanner answers are identical except the echoed answer");
+    }
+    Check(scanCorrect.Body.GetProperty("log_entry").GetProperty("transaction_id").GetInt32() == 301, "Night Scanner verified answer carries its log entry");
+
+    // Answer oracle, every entry of both cases: (its transaction, a fake client) and (a fake transaction, its client)
+    // serialize to byte-identical JSON once the echoed answer is removed, and match one reference unverified reply per case.
+    foreach (var caseId in new[] { "phantom-writer", "night-scanner" })
+    {
+        var log = service.IncidentLog(caseId)!;
+        string Reply(int tx, string label)
+        {
+            var result = service.AnswerAsync(new AnswerRequest(caseId, tx, label), CancellationToken.None).GetAwaiter().GetResult();
+            Check(result["verified"] is false, $"{caseId} ({tx}, {label}) is not verified");
+            result.Remove("answer");
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        int fakeTx = Enumerable.Range(0, 65536).First(t => log.entries.All(e => e.transaction_id != t));
+        string reference = Reply(fakeTx, "FAKE-CLIENT");
+        Check(!reference.Contains("log_entry\":{") && reference.Contains("\"log_entry\":null"), $"{caseId} unverified reply has no log entry");
+        foreach (var e in log.entries)
+        {
+            Check(Reply(e.transaction_id, "FAKE-CLIENT") == reference, $"{caseId} ({e.transaction_id}, fake client) matches the reference unverified reply");
+            Check(Reply(fakeTx, e.client) == reference, $"{caseId} (fake transaction, {e.client}) matches the reference unverified reply");
+        }
+    }
 }
 foreach (var (body, name) in new[]
 {

@@ -195,9 +195,8 @@ public sealed class TrainingService : IAsyncDisposable
     {
         var incidentLog = incidentLogs[answer.scenario_id];
         var diagnosis = Diagnosis.ForAnswer(incidentLog, answer);
-        var entry = incidentLog.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
-        // An unverified answer must not reveal the answer entry's label, so that entry is redacted.
-        if (entry != null && !diagnosis.Verified && entry == Diagnosis.AnswerEntry(incidentLog)) entry = entry with { client = "(not shown until the answer is verified)" };
+        // An unverified answer carries no log entry: which part was wrong must not be inferable from the reply.
+        var entry = diagnosis.Verified ? incidentLog.entries.First(e => e.transaction_id == answer.transaction_id) : null;
         var result = new Dictionary<string, object?>
         {
             ["status"] = "answered", ["verified"] = diagnosis.Verified, ["answer"] = answer,
@@ -247,7 +246,7 @@ public static class Diagnosis
             steps = new[] { "Restart the local application and retry." };
         }
         var hints = scenario.id == NightScannerScript.ScenarioId
-            ? new[] { "Training hint: " + scenario.documentation[0], "Training hint: a verified read confirms that unit 5 answers normally in this simulation, not which other clients queried the gateway. Open the simulated traffic log." }
+            ? new[] { "Training hint: " + scenario.documentation[0], "Training hint: a verified read confirms that unit 5 answers normally in this simulation, not which other clients queried the gateway. Open the simulated traffic log.", "Training hint: probing many unit IDs yourself with test reads is exactly the behavior this case teaches you to detect in the simulated traffic log." }
             : scenario.category == "security"
             ? new[] { "Training hint: " + scenario.documentation[0], "Training hint: a verified read confirms the current simulated setpoint, not who changed it. Open the simulated traffic log." }
             : new[] { "Training hint: " + scenario.documentation[0] };
@@ -269,22 +268,25 @@ public static class Diagnosis
 
     private static string StatusText(TrafficLogEntry e) => e.status == "exception" ? $"exception {e.exception_code:D2} ({ModbusCodec.ExceptionName(e.exception_code ?? 0)})" : e.status;
 
+    // The only answer that verifies: the case's answer entry with its client label (ordinal, case-insensitive, trimmed).
+    private static TrafficLogEntry? VerifiedEntry(TrafficLog log, AnswerRequest answer)
+    {
+        var target = AnswerEntry(log);
+        return target != null && target.transaction_id == answer.transaction_id && string.Equals(target.client, answer.client.Trim(), StringComparison.OrdinalIgnoreCase) ? target : null;
+    }
+
+    // Every unverified answer gets this same result, whichever part was wrong, so the reply cannot reveal the answer row.
+    private static DiagnosisResult Unverified(TrafficLog log) => new(
+        new() { "The submitted pair does not match the event this case asks for." },
+        new[] { log.scenario_id == NightScannerScript.ScenarioId ? "The submitted pair does not match the first request of a scan in this simulated capture." : "The submitted pair does not match a write in this simulated capture." },
+        Array.Empty<string>(),
+        new[] { log.scenario_id == NightScannerScript.ScenarioId ? "Compare the unit ID and client label columns of the simulated traffic log, then submit a transaction ID and client label." : "Compare the function code of each entry in the simulated traffic log, then submit a transaction ID and client label." },
+        false);
+
     private static DiagnosisResult ForScanAnswer(TrafficLog log, AnswerRequest answer)
     {
-        var entry = log.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
-        var first = AnswerEntry(log);
-        var mismatch = new[] { "The submitted pair does not match the first request of a scan in this capture." };
-        var retry = new[] { "Compare the unit ID and client label columns of the simulated traffic log, then submit a transaction ID and client label." };
-        string Describe(TrafficLogEntry e) => $"FC{e.function_code:D2} · {e.function_name} to unit {e.unit_id} at address {e.address}";
-        if (entry == null)
-            return new(new() { $"No transaction {answer.transaction_id} appears in this simulated capture." }, mismatch, Array.Empty<string>(), retry, false);
-        bool clientMatches = string.Equals(entry.client, answer.client.Trim(), StringComparison.OrdinalIgnoreCase);
-        if (entry != first)
-            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} from {entry.client} is {Describe(entry)}, status {StatusText(entry)}." }, mismatch, Array.Empty<string>(), retry, false);
-        if (!clientMatches)
-            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} is {Describe(entry)}.", "The submitted client label differs from the capture's label for this transaction." },
-                new[] { "The submitted client label does not match the capture metadata for this transaction." }, Array.Empty<string>(),
-                new[] { "Re-read the client label column for this transaction in the simulated traffic log." }, false);
+        var entry = VerifiedEntry(log, answer);
+        if (entry == null) return Unverified(log);
 
         // Verified: every value below is computed from captured log entries, not from plan constants.
         var run = log.entries.Where(e => e.client == entry.client).OrderBy(e => e.sequence).ToArray();
@@ -312,19 +314,8 @@ public static class Diagnosis
     public static DiagnosisResult ForAnswer(TrafficLog log, AnswerRequest answer)
     {
         if (log.scenario_id == NightScannerScript.ScenarioId) return ForScanAnswer(log, answer);
-        var entry = log.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
-        var mismatch = new[] { "The submitted pair does not match a write in this capture." };
-        var retry = new[] { "Compare the function code of each entry in the simulated traffic log, then submit a transaction ID and client label." };
-        string Describe(TrafficLogEntry e) => $"FC{e.function_code:D2} · {e.function_name} at address {e.address}";
-        if (entry == null)
-            return new(new() { $"No transaction {answer.transaction_id} appears in this simulated capture." }, mismatch, Array.Empty<string>(), retry, false);
-        bool clientMatches = string.Equals(entry.client, answer.client.Trim(), StringComparison.OrdinalIgnoreCase);
-        if (entry.function_code != 6)
-            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} from {entry.client} is {Describe(entry)}." }, mismatch, Array.Empty<string>(), retry, false);
-        if (!clientMatches)
-            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} is {Describe(entry)}.", "The submitted client label differs from the capture's label for this transaction." },
-                new[] { "The submitted client label does not match the capture metadata for this transaction." }, Array.Empty<string>(),
-                new[] { "Re-read the client label column for this transaction in the simulated traffic log." }, false);
+        var entry = VerifiedEntry(log, answer);
+        if (entry == null) return Unverified(log);
 
         // Verified: every value below is read from captured log entries, not from script constants.
         var before = log.entries.Where(e => e.sequence < entry.sequence && e.function_code is 3 or 4).OrderBy(e => e.sequence).LastOrDefault();

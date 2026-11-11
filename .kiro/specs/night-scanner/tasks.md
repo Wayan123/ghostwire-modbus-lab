@@ -46,3 +46,10 @@ Run the harness after every task from the repository root: `tools/dotnet run --p
 - [x] 8. Browser check
   - Headless Windows Chrome via a temporary script outside the repository (deleted afterwards): picker group, Status column, hint 1 after three wrong answers, verified answer and flag, no console errors, no overflow at 360 px. Record results in `docs/verification.md`.
   - _Requirements: 4.1, 4.2, 4.4, 4.5, 4.7, 7.3_
+
+- [x] 9. Fix the session 10 security review findings
+  - Answer oracle: every unverified answer in both security cases returns one identical reply (observation "The submitted pair does not match the event this case asks for.", case-level cause and next step, no hint, no mitigations, `log_entry: null`). Remove the redaction and the "client label differs" branch. Progressive hints stay client-side.
+  - Harness: for every log entry of both cases, (its transaction, a fake client) and (a fake transaction, its client) serialize to the same JSON as a reference unverified reply once `answer` is removed; plus one HTTP pair per case.
+  - `CaptureAsync`: per-step deadline (300 ms for steps expected to reply, 100 ms for probes of absent units); a step deadline during connect or write is rethrown as `InvalidOperationException` naming the step.
+  - Night Scanner read hint: probing many unit IDs yourself is the behavior this case teaches learners to detect.
+  - _Requirements: 2.5, 3.6_

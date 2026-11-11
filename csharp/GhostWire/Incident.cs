@@ -83,7 +83,9 @@ public static class NightScannerScript
     public const string PollClient = "HMI-01";
     public const ushort ScanAddress = 0;
     public const int PollIntervalSeconds = 5;
-    // Bounded like every Modbus exchange here, and within the 300 ms Modbus deadline, so startup stays fast.
+    // Steps expected to get a reply use the 300 ms Modbus deadline. Only probes of unit IDs with no device use the
+    // shorter deadline, so startup stays fast without failing on a slow host.
+    public static readonly TimeSpan ReplyDeadline = TimeSpan.FromMilliseconds(300);
     public static readonly TimeSpan ProbeDeadline = TimeSpan.FromMilliseconds(100);
     public static readonly DateTimeOffset Start = new(2026, 11, 1, 3, 12, 0, TimeSpan.Zero);
     public const string CaptureNote = "Simulated capture generated at server start from loopback exchanges with a private gateway simulator. Modbus TCP frames carry no client identity; client labels are capture metadata. A request with no reply within 100 ms is logged as a timeout.";
@@ -130,7 +132,7 @@ public static class IncidentLogGenerator
         var script = IncidentScript.PhantomWriter;
         List<TrafficLogEntry> entries;
         await using (var simulator = new ModbusSimulator(IncidentScript.Unit, new() { [3] = new() { [IncidentScript.Register] = IncidentScript.InitialSetpoint } }, allowWrites: true, recorder: recorder))
-            entries = await CaptureAsync(simulator, recorder, script, IncidentScript.Start, TimeSpan.FromMilliseconds(300), ct);
+            entries = await CaptureAsync(simulator, recorder, script, IncidentScript.Start, _ => TimeSpan.FromMilliseconds(300), ct);
 
         // Validate the capture against the script: 650 before the write, an FC06 echo of 950, then 950.
         int writeIndex = Array.FindIndex(script, s => s.Function == 6);
@@ -158,7 +160,8 @@ public static class IncidentLogGenerator
         var recorder = new Recorder();
         List<TrafficLogEntry> entries;
         await using (var gateway = new ModbusSimulator(NightScannerScript.Devices(plan), recorder: recorder))
-            entries = await CaptureAsync(gateway, recorder, script, NightScannerScript.Start, NightScannerScript.ProbeDeadline, ct);
+            entries = await CaptureAsync(gateway, recorder, script, NightScannerScript.Start,
+                step => step.Unit == NightScannerScript.BoilerUnit || step.Unit == plan.RespondingUnit ? NightScannerScript.ReplyDeadline : NightScannerScript.ProbeDeadline, ct);
 
         for (int i = 0; i < entries.Count; i++)
         {
@@ -186,7 +189,7 @@ public static class IncidentLogGenerator
     // Runs each step on its own loopback connection, strictly in order, and builds log entries from the bytes the
     // simulator recorded. A timeout is logged only when this client's deadline expired and the simulator sent nothing.
     private static async Task<List<TrafficLogEntry>> CaptureAsync(ModbusSimulator simulator, Recorder recorder, IReadOnlyList<IncidentStep> script,
-                                                                  DateTimeOffset start, TimeSpan stepDeadline, CancellationToken ct)
+                                                                  DateTimeOffset start, Func<IncidentStep, TimeSpan> stepDeadline, CancellationToken ct)
     {
         var ports = new int[script.Count];
         var timedOut = new bool[script.Count];
@@ -197,13 +200,24 @@ public static class IncidentLogGenerator
             var request = step.Function == 6
                 ? ModbusCodec.EncodeWriteSingleRequest(step.TransactionId, step.Unit, step.Address, step.QuantityOrValue)
                 : ModbusCodec.EncodeReadRequest(step.TransactionId, step.Unit, step.Function, step.Address, step.QuantityOrValue);
+            var limit = stepDeadline(step);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadline.CancelAfter(stepDeadline);
+            deadline.CancelAfter(limit);
             using var tcp = new TcpClient();
-            await tcp.ConnectAsync(IPAddress.Loopback, simulator.Port, deadline.Token);
-            ports[i] = ((IPEndPoint)tcp.Client.LocalEndPoint!).Port;
-            using var stream = tcp.GetStream();
-            await stream.WriteAsync(request, deadline.Token);
+            NetworkStream stream;
+            try
+            {
+                await tcp.ConnectAsync(IPAddress.Loopback, simulator.Port, deadline.Token);
+                ports[i] = ((IPEndPoint)tcp.Client.LocalEndPoint!).Port;
+                stream = tcp.GetStream();
+                await stream.WriteAsync(request, deadline.Token);
+            }
+            // Only the outer token means the 5 s startup deadline; a step deadline here is a connect or write failure.
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                throw new InvalidOperationException($"Incident step {step.TransactionId}: connect/write exceeded its {limit.TotalMilliseconds} ms step deadline", ex);
+            }
+            using var ownedStream = stream;
             try
             {
                 var header = new byte[7];

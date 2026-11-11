@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Run Windows .NET SDK from WSL (repo lives on /mnt/d); falls back to a Linux dotnet if present.
+# Forward GhostWire settings (PBT seed, port, optional AI provider) from WSL to the Windows process.
+for v in GHOSTWIRE_PBT_SEED GHOSTWIRE_PORT GHOSTWIRE_AI_BASE_URL GHOSTWIRE_AI_MODEL GHOSTWIRE_AI_API_KEY; do
+  [ -n "${!v:-}" ] && case ":${WSLENV:-}:" in *":$v:"*) ;; *) export WSLENV="${WSLENV:+$WSLENV:}$v" ;; esac
+done
 if command -v dotnet.exe >/dev/null 2>&1; then exec dotnet.exe "$@"; fi
 if [ -x "/mnt/c/Program Files/dotnet/dotnet.exe" ]; then exec "/mnt/c/Program Files/dotnet/dotnet.exe" "$@"; fi
 exec dotnet "$@"

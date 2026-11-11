@@ -199,9 +199,7 @@ public static class Diagnosis
 
 - Find the log entry with `transaction_id`. Compare `client` using ordinal, case-insensitive matching after trimming.
 - Verified only when that entry is the scripted FC06 entry and the client label matches.
-- Not verified, entry exists: observation "In this simulated capture, transaction N from <label> is FC03 · Read Holding Registers at address 100." Possible cause: "The submitted pair does not match a write in this capture." No hint about the correct row.
-- Not verified, entry exists and is the write but the client label is wrong: observation states that transaction N is an FC06 write and that the submitted client label differs from the capture's label for that transaction. This reveals only what the selected row already shows.
-- Not verified, no entry: observation "No transaction N appears in this simulated capture."
+- Not verified, for any reason (no entry, a read entry, or the write entry with a wrong client label): one identical reply. Observation "The submitted pair does not match the event this case asks for." Possible cause "The submitted pair does not match a write in this simulated capture." No hint about the correct row and `log_entry: null`. (Revised after the night-scanner session 10 security review: the earlier per-branch wording and redaction let a learner find the answer row.)
 - Verified: observations list function 06, unit 5, address 100, old value 650 (from the last read before the write), new value 950 (from the write echo and the next read), simulated time and client label, each read from the log entries rather than from constants.
 
 ### `TrainingService` (changed)
