@@ -110,6 +110,44 @@ li + li { margin-top: .4rem; }
 .history-detail p:last-child { margin-bottom: 0; white-space: pre-wrap; }
 .empty-history { color: var(--muted); font-size: .875rem; margin-bottom: 0; }
 footer { padding: 1.25rem 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; text-align: center; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.wire { margin: 0 0 1.25rem; padding: .25rem 1rem .75rem; background: var(--paper); border: 1px solid var(--line); }
+.wire-intro p, .terms { font-size: .85rem; color: var(--muted); }
+.terms { display: grid; grid-template-columns: max-content 1fr; gap: .25rem .75rem; margin: 0 0 1rem; }
+.terms dt { color: var(--ink); font-weight: 700; }
+.terms dd { margin: 0; }
+.frame { margin-top: 1rem; min-width: 0; }
+.frame h4 { margin: 0 0 .4rem; font-size: .9rem; }
+.hex, .frame-table code, .hex-line { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+.hex { display: block; padding: .5rem .65rem; background: var(--forest-dark); border: 1px solid var(--line); overflow-wrap: anywhere; font-size: .9rem; }
+.hex span { padding: 0 .05rem; transition: background-color .15s ease; }
+.hex span.hl { background: var(--accent); color: #1c120b; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.frame-table, .log-table { width: 100%; border-collapse: collapse; margin-top: .5rem; font-size: .85rem; }
+.frame-table th, .frame-table td, .log-table th, .log-table td { padding: .4rem .5rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.frame-table thead th, .log-table thead th { color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .04em; }
+.frame-table tbody tr:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.frame-table tbody tr.active { background: var(--soft); }
+.frame-table .range { color: var(--muted); font-size: .75rem; }
+.decode-error td { color: var(--error); font-weight: 700; }
+.incident .notice { color: var(--ink); }
+.table-scroll { overflow-x: auto; margin-bottom: 1.25rem; }
+.log-table caption { text-align: left; color: var(--muted); font-size: .8rem; padding-bottom: .4rem; }
+.log-table details summary { min-height: 2.25rem; padding: .3rem 0; font-weight: 600; }
+.log-table button { min-height: 2.25rem; padding: .35rem .7rem; }
+.log-table tr[data-flag="unauthorized"] { background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 172, 170, .12) 8px 16px); }
+.log-table tr[data-flag="unauthorized"] > :first-child { border-left: 6px double var(--error); }
+.log-table tr[data-flag="unauthorized"]:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.flag { display: inline-block; margin-top: .25rem; padding: .1rem .4rem; border: 1px dashed var(--error); color: var(--error); font-weight: 800; font-size: .75rem; }
+.answer-form { margin-bottom: 1.25rem; }
+.answer-result { border-top: 1px solid var(--line); padding-top: 1rem; }
+.answer-result .status { display: inline-block; margin-bottom: .5rem; }
+.mitigations { margin-bottom: 1rem; }
+.mitigations ul { font-size: .875rem; }
+.answer-history-title { margin: 1.25rem 0 .5rem; }
+.hex-line { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
 @media (min-width: 36rem) {
   .page { padding-inline: 2rem; }
   .fields, .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -128,7 +166,7 @@ footer { padding: 1.25rem 1rem; border-top: 1px solid var(--line); color: var(--
 }
 @media print {
   :root { color-scheme: light; --ink: #111; --muted: #333; --paper: white; --surface: white; --line: #555; --forest: #111; --forest-dark: white; --soft: white; --success: #111; --error: #111; color: black; background: white; }
-  .skip-link, button, .workflow, .setup, .evidence { display: none !important; }
+  .skip-link, button, .workflow, .setup, .evidence, .incident { display: none !important; }
   .page { max-width: none; padding: 0; }
   .layout, .intro { display: block; }
   .panel, .scope-note { border: 0; padding: .5rem 0; break-inside: avoid; }
@@ -136,4 +174,6 @@ footer { padding: 1.25rem 1rem; border-top: 1px solid var(--line); color: var(--
   .reading-caption { color: black; }
   .history-list details > * { display: block; }
   .history-list li { break-inside: avoid; }
+  .hex, .hex span.hl { background: white; color: black; text-decoration: none; }
+  .hex-line { font-size: .8rem; }
 }

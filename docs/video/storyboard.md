@@ -1,15 +1,23 @@
-# GhostWire demonstration storyboard
+# Demo video plan (Kiroween 2026)
 
-Target: 2:00–2:45, English captions, 16:9. Show only the actual running application and observed results; revise this script after verification. Do not use proprietary images, music or third-party trademarks without permission. No publication is authorized.
+Target: **2:40**, 1920×1080, 30 fps, English narration and burned-in English captions. No third-party music; use silence or a self-generated tone. It goes on public YouTube once the owner approves. It is produced with the content-studio pipeline (HyperFrames, already installed and pinned) and follows that pipeline's `CLAIMS.md` / `QC.md` rule: every on-screen claim maps to a recorded app action or a ledger entry.
 
-| Time | Visual | Narration / captions |
+## Script
+
+| Time | Visual (all real recordings) | Narration |
 |---|---|---|
-| 00:00–00:15 | Actual case selector | Industrial readings can mislead when configuration or interpretation is wrong. GhostWire is a safe training lab for investigating simulated Modbus faults. |
-| 00:15–01:05 | Giant Pressure: request, raw data, device documentation, scale correction, retest | The simulated device reports raw 39. Its documentation specifies 0.01 bar per count. Apply that scale and retest: 0.39 bar. |
-| 01:05–01:30 | Evidence board and case history | The board separates observed results, possibilities, training hints and verified outcomes. A timeout by itself does not prove the cause. |
-| 01:30–02:00 | Silent Sensor and Wrong Register; demonstrate real retests if recording permits | Compare the documented Unit ID and register map, change one setting, and test again. These outcomes apply to this simulator, not every physical device. |
-| 02:00–02:20 | AI explanation source and fallback | Explanations are optional. Protocol observations remain the source of truth, with a labeled deterministic fallback. |
-| 02:20–02:40 | Verified Kiro artifacts and real usage evidence | Describe only Kiro features actually used and their concrete contribution. If Kiro use has not occurred, omit the claim and flag the competition requirement. |
-| 02:40–02:45 | Application and safety label | GhostWire: investigate the evidence before changing a real system. |
+| 0:00–0:12 | Boiler setpoint reads 95.0 °C; status turns red | "At 2 a.m. a boiler setpoint jumps to 95 degrees. Modbus has no passwords. Who wrote it?" |
+| 0:12–0:25 | Title card + case picker grouped Troubleshooting / Security | "GhostWire is a safe OT lab: real Modbus TCP against local simulators, for technicians who have to debug and defend plants." |
+| 0:25–0:55 | Silent Sensor: timeout → possible causes (not proof) → Unit ID 17 → verified; open **Wire evidence**, hover bytes → MBAP fields highlight | "A timeout never proves one cause. GhostWire shows what was observed, what's possible, and the exact bytes on the wire." |
+| 0:55–1:10 | Giant Pressure 39 → 0.39 bar | "Raw counts aren't engineering values." |
+| 1:10–1:45 | Phantom Writer: read 950 → open traffic log → spot FC06 from MAINT-LAPTOP-07, txn 1111 → submit → verified + mitigations (IEC 62443 zones, write allow-list, Modbus/TCP Security) | "The log was captured from real exchanges. Find the write, name the source, then learn how real plants stop it." |
+| 1:45–2:25 | Kiro: `.kiro/specs/ot-security-lab` tasks checked; agents list; the guard hook **blocking** a non-loopback IP write (recorded live); test-on-save hook output; `docs/kiro-log/LEDGER.md` | "Kiro built this: a spec with property-based tests, three custom agents, and hooks. One hook physically refuses code that targets a real plant." |
+| 2:25–2:40 | Repo URL, Apache-2.0, "simulation only" | "GhostWire. Investigate the evidence before you touch a real system." |
 
-Official rules require a publicly visible YouTube video and state judges need not watch beyond three minutes. This storyboard is not a completed recording.
+## Shots to record (Windows Chrome, 1440×900, then scale)
+1. Each of the 4 cases from a fresh page load.
+2. Kiro CLI session: ask `ghostwire-builder` to add a "remote gateway at 192.168.1.50" → the guard hook blocks it (exit 2 message). Keep this transcript in `docs/kiro-log/`.
+3. `/spec run ot-security-lab` view, or the checked `tasks.md`.
+
+## Deliverables
+`docs/video/ghostwire-demo.mp4`, `.srt`, `CLAIMS.md`, `QC.md`; YouTube URL recorded in `docs/devpost-draft.md`.

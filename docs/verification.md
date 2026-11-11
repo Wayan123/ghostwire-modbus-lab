@@ -1,5 +1,35 @@
 # Verification record
 
+## ot-security-lab feature (frame inspector, Phantom Writer, categories, property tests), 2026-11-11
+
+Observed in the local WSL environment using Windows .NET SDK 8.0.427 through `tools/dotnet`.
+
+- `tools/dotnet build csharp/GhostWire/GhostWire.csproj` succeeded with 0 warnings and 0 errors.
+- `tools/dotnet run --project csharp/GhostWire.Tests/GhostWire.Tests.csproj` printed `PBT seed: 1616322598 (0x60572026) (default)`, `Check calls passed: 26671` and `All GhostWire protocol and HTTP checks passed.` on two consecutive runs. Property results, with the elapsed time from one run:
+  - P-a codec round-trip (FC03/FC04/FC06 requests and responses, exceptions): 600 cases, 14 ms.
+  - P-b decoder never throws on 0–300 random bytes, both directions: 600 cases, 13 ms.
+  - P-e frames hex equals the bytes the simulator recorded: 200 cases, 4,585 ms.
+  - P-c transport status partition (response/exception/timeout, register count equals quantity, exception 02 out of map): 200 cases in batches of 8, 4,844 ms.
+  - P-d timeout diagnosis is never verified, has at least two causes, at least one not about the unit ID, and no certainty wording: 400 cases, 16 ms.
+- One run with `GHOSTWIRE_PBT_SEED=12345` also passed and printed `PBT seed used: 12345`.
+- Example checks that passed in the same run include: the Giant Pressure request `00 01 00 00 00 06 07 03 00 0A 00 01` and response `00 01 00 00 00 05 07 03 02 00 27` (field `Register 10 = 39 (0x0027)`); the Silent Sensor timeout returns one request frame; the Wrong Register response decodes `02 · Illegal Data Address`; `ModbusClient` refuses function 6 before any bytes reach the simulator; the default simulator answers FC06 with `86 01` and leaves the register unchanged; the learner-facing `phantom-writer` simulator answers FC06 with `86 01` and register 100 still reads 950; the Phantom Writer read returns raw 950, 95 °C, `verified: true`; four scenarios with the specified categories and difficulties.
+- Traffic log checks: 12 entries, unique transaction IDs, exactly one FC06 entry, two client labels, every frame re-decodes to its entry's fields, and identical JSON from two independent `TrainingService` instances. `/api/incident/unit-id/log`, `/api/incident/../log` and an encoded traversal id return 404.
+- Answer checks: transaction 1111 with `MAINT-LAPTOP-07` verifies with four labeled mitigations and observations citing function 06, unit 5, register 100, 650, 950, `2026-10-31T02:13:33Z` and the label. A wrong client, a read transaction and a missing transaction each return `verified: false`, no mitigations and no `MAINT-LAPTOP-07` in the body. Extra, duplicate and missing fields, a non-security scenario, `transaction_id` 70000 or as a string, client `a b`, a 33-character client and invalid JSON return 400; `text/plain` returns 415; a foreign Origin or Host returns 403; an oversized body is rejected.
+- Local test provider: the provider request contains `frames` (and `log_entry` for answers); provider text left `verified`, `frames` and `mitigations` unchanged for `/api/test` and `/api/incident/answer`. This is not an external AI-provider test.
+- Traffic log served by the running server (`GET /api/incident/phantom-writer/log`): sequences 1–7 are FC03 reads by `HMI-01`, transactions 1–7, at 02:13:00Z to 02:13:30Z, each returning 650 (`… 05 03 02 02 8A`). Sequence 8 is FC06 by `MAINT-LAPTOP-07`, transaction 1111, at 02:13:33Z: request and echo `04 57 00 00 00 06 05 06 00 64 03 B6`. Sequences 9–12 are FC03 reads by `HMI-01`, transactions 8–11, at 02:13:35Z to 02:13:50Z, each returning 950 (`… 05 03 02 03 B6`).
+
+### Browser checks (Windows Chrome headless driven over the DevTools protocol by a temporary script outside the repository)
+
+35 of 35 checks passed against the running server after one fix (the answer button no longer becomes `disabled` during submission, which had dropped keyboard focus):
+
+- The picker shows "Troubleshooting" and "Security incidents" groups with difficulty in the option text; the traffic log panel is hidden for troubleshooting cases and shown for Phantom Writer.
+- Keyboard only: Tab reached the Wire evidence summary, Enter opened it, and Tab moved through field rows. Each focused row highlighted its bytes (underline as well as background) and stated "bytes 0–1", "byte 6" and so on as text. Tab reached a log row's Select button, Enter filled the answer form, and the flagged row was reachable with Tab. Focus stayed on the submit button while the result was announced in the `role="status"` message.
+- No row was marked before a verified answer. After the verified answer the FC06 row showed "⚠ Unauthorized write" with a double left border and hatched background, and four mitigations under "Next steps · real-world guidance, not verified by this simulation". A wrong answer showed "Status: answer not verified" and no mitigations.
+- Emulated `prefers-reduced-motion: reduce` set the byte-highlight transition to 0s.
+- Emulated print media hid the investigation panels, kept case history, expanded the answer attempts, and `Page.printToPDF` rendered.
+
+Not checked: a screen reader, a real mobile device, a physical printer, startup failure injection for the incident generator (the code throws and the host resolves the service eagerly, but no harness check forces a mismatch), and the empty `frames` case for a request that was never written (not reproducible on a working loopback listener). The `ot-security-reviewer` agent review was not run in this session.
+
 ## Windows x64 executable package, 2026-11-10
 
 - Published with Windows .NET SDK 8.0.427 using `dotnet publish -c Release --no-restore --self-contained false`. The apphost is a 148 KiB PE32+ executable; the full folder occupied 264 KiB before adding its README. Runtime dependencies are not bundled.

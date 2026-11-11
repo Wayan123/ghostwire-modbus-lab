@@ -67,7 +67,54 @@
               <section><h3>Next steps <span>Suggested actions, not proof</span></h3><ul id="next_steps"></ul></section>
             </div>
             <div class="verification"><span class="reading-label">VERIFICATION</span><p id="verified"></p></div>
+            <details id="wire-evidence" class="wire">
+              <summary>Wire evidence (simulated frames)</summary>
+              <div class="wire-intro">
+                <p>These are the exact bytes exchanged with the local simulator for this read, shown as hexadecimal. Move the pointer over a row, or Tab to it, to highlight its bytes.</p>
+                <dl class="terms">
+                  <dt>MBAP header</dt><dd>The first 7 bytes of every Modbus TCP frame: transaction ID, protocol ID, length and unit ID.</dd>
+                  <dt>PDU</dt><dd>Protocol data unit: the function code and its data, after the MBAP header.</dd>
+                  <dt>Unit ID</dt><dd>The device address a gateway uses to route the request.</dd>
+                  <dt>Function code</dt><dd>What the request asks for, for example 03 (read holding registers) or 04 (read input registers). An exception reply adds 80 hex to it.</dd>
+                </dl>
+              </div>
+              <div id="frames"></div>
+            </details>
             <section class="explanation"><div class="explanation-heading"><h3>Explanation</h3><span id="explanation-source" class="source"></span></div><p id="explanation"></p></section>
+          </div>
+        </section>
+        <section id="incident-panel" class="panel incident" aria-labelledby="log-title" hidden>
+          <div class="section-heading"><div><p class="eyebrow">02B / INVESTIGATE THE CAPTURE</p><h2 id="log-title">Simulated traffic log</h2></div></div>
+          <p id="log-note" class="notice"></p>
+          <p class="muted">FC03 reads holding registers. FC06 (Write Single Register) changes one holding register. Find the entry that changed the setpoint, then select it and submit its transaction ID and client label.</p>
+          <p id="log-message" class="form-message" role="status" aria-live="polite"></p>
+          <div class="table-scroll">
+            <table id="log-table" class="log-table">
+              <caption>Simulated capture, one row per Modbus transaction</caption>
+              <thead><tr><th scope="col">Seq</th><th scope="col">Simulated time</th><th scope="col">Client label</th><th scope="col">Transaction ID</th><th scope="col">Unit ID</th><th scope="col">Function</th><th scope="col">Address</th><th scope="col">Value(s)</th><th scope="col">Frames</th><th scope="col">Answer</th></tr></thead>
+              <tbody id="log-body"></tbody>
+            </table>
+          </div>
+          <form id="answer-form" class="answer-form">
+            <fieldset id="answer-fields"><legend>Your answer</legend>
+              <div class="fields">
+                <div><label for="answer-transaction">Transaction ID</label><input id="answer-transaction" name="transaction_id" type="number" min="0" max="65535" step="1" required></div>
+                <div><label for="answer-client">Client label</label><input id="answer-client" name="client" type="text" required maxlength="32" pattern="[A-Za-z0-9._\-]{1,32}" aria-describedby="answer-client-help" autocomplete="off" spellcheck="false"><p id="answer-client-help" class="field-help">1–32 letters, digits, '.', '_' or '-', as shown in the log.</p></div>
+              </div>
+            </fieldset>
+            <button id="submit-answer" class="primary" type="submit">Submit answer</button>
+          </form>
+          <div id="answer-result" class="answer-result" hidden>
+            <p id="answer-status" class="status">Answer</p>
+            <div class="evidence-grid">
+              <section><h3>Observations <span>From the simulated capture</span></h3><ul id="answer-observations"></ul></section>
+              <section><h3>Possible causes <span>Hypotheses, not proof</span></h3><ul id="answer-possible_causes"></ul></section>
+              <section><h3>Training hints <span>Specific to this simulator</span></h3><ul id="answer-training_hints"></ul></section>
+              <section><h3>Next steps <span>Suggested actions, not proof</span></h3><ul id="answer-next_steps"></ul></section>
+            </div>
+            <section id="mitigations-section" class="mitigations"><h3>Next steps · real-world guidance, not verified by this simulation</h3><ul id="answer-mitigations"></ul></section>
+            <div class="verification"><span class="reading-label">VERIFICATION</span><p id="answer-verified"></p></div>
+            <section class="explanation"><div class="explanation-heading"><h3>Explanation</h3><span id="answer-explanation-source" class="source"></span></div><p id="answer-explanation"></p></section>
           </div>
         </section>
         <section class="panel comparison" aria-labelledby="comparison-title">
@@ -82,6 +129,8 @@
           <p class="muted">Completed reads are kept per case until this page is reloaded. The printed report includes this case's recorded reads.</p>
           <p id="history-empty" class="empty-history">No tests recorded. Each completed read will appear here.</p>
           <ol id="history-list" class="history-list"></ol>
+          <h3 id="answer-history-title" class="answer-history-title" hidden>Answer attempts</h3>
+          <ol id="answer-history" class="history-list" aria-labelledby="answer-history-title"></ol>
         </section>
       </div>
     </div>

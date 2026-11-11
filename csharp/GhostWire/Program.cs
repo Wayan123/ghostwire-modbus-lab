@@ -34,6 +34,8 @@ namespace GhostWire
                     }));
             });
             var app = builder.Build();
+            // Resolve eagerly so a Phantom Writer generation failure stops startup instead of failing the first request.
+            app.Services.GetRequiredService<TrainingService>();
             var concurrentTests = new SemaphoreSlim(8);
             app.Use(async (context, next) =>
             {
@@ -62,7 +64,8 @@ namespace GhostWire
             });
             app.UseRateLimiter();
             app.MapGet("/api/scenarios", (TrainingService service) => Results.Json(service.Scenarios()));
-            app.MapPost("/api/test", async (HttpContext context, TrainingService service) =>
+            // Shared by POST /api/test and POST /api/incident/answer: content type, 16 KiB body, JSON parsing and the 8-slot gate.
+            async Task<IResult> ReadJsonBodyAsync(HttpContext context, Func<JsonElement, Task<IResult>> handle)
             {
                 if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(context.Request.ContentType, out var type) || !string.Equals(type.MediaType, "application/json", StringComparison.OrdinalIgnoreCase))
                     return Results.Json(new { error = "Content-Type must be application/json" }, statusCode: 415);
@@ -81,13 +84,24 @@ namespace GhostWire
                     }
                     if (buffer.Length == 0) return Results.Json(new { error = "Invalid request size" }, statusCode: 400);
                     using var document = JsonDocument.Parse(buffer.ToArray());
-                    var request = TrainingService.Validate(document.RootElement);
-                    return Results.Json(await service.TestAsync(request, context.RequestAborted));
+                    return await handle(document.RootElement);
                 }
                 catch (JsonException) { return Results.Json(new { error = "Invalid JSON" }, statusCode: 400); }
                 catch (ArgumentException ex) { return Results.Json(new { error = ex.Message }, statusCode: 400); }
                 finally { concurrentTests.Release(); }
-            });
+            }
+            app.MapPost("/api/test", (HttpContext context, TrainingService service) => ReadJsonBodyAsync(context, async payload =>
+            {
+                var request = TrainingService.Validate(payload);
+                return Results.Json(await service.TestAsync(request, context.RequestAborted));
+            }));
+            app.MapGet("/api/incident/{scenario_id}/log", (string scenario_id, TrainingService service) =>
+                service.IncidentLog(scenario_id) is { } log ? Results.Json(log) : Results.Json(new { error = "Not found" }, statusCode: 404));
+            app.MapPost("/api/incident/answer", (HttpContext context, TrainingService service) => ReadJsonBodyAsync(context, async payload =>
+            {
+                var answer = TrainingService.ValidateAnswer(payload);
+                return Results.Json(await service.AnswerAsync(answer, context.RequestAborted));
+            }));
             app.Map("/api/{**path}", () => Results.Json(new { error = "Not found" }, statusCode: 404));
             var frontend = Path.Combine(AppContext.BaseDirectory, "frontend");
             if (!Directory.Exists(frontend)) throw new DirectoryNotFoundException($"Frontend assets not found: {frontend}");
