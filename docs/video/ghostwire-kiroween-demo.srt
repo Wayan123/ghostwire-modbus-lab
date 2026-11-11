@@ -78,47 +78,57 @@ degrees. Then come real-world mitigations, clearly marked
 as guidance.
 
 18
-00:01:24,140 --> 00:01:25,147
-Kiro built this.
+00:01:24,140 --> 00:01:29,522
+A second incident, the Night Scanner: one workstation
+sweeps unit IDs one by one.
 
 19
-00:01:25,147 --> 00:01:31,759
-A spec with EARS requirements and twenty-eight tasks, and
-correctness properties that became two thousand
+00:01:29,522 --> 00:01:31,980
+Find where the reconnaissance starts.
 
 20
-00:01:31,759 --> 00:01:33,900
-property-based test cases per run.
+00:01:32,330 --> 00:01:33,357
+Kiro built this.
 
 21
-00:01:34,250 --> 00:01:39,325
+00:01:33,357 --> 00:01:40,414
+Two specs with EARS requirements and forty-one tasks, and
+correctness properties that became over two thousand
+
+22
+00:01:40,414 --> 00:01:45,290
+property-based test cases per run. One of them caught a
+real race condition.
+
+23
+00:01:45,640 --> 00:01:50,715
 Three custom agents: a builder, a read-only security
 reviewer, and a scenario author.
 
-22
-00:01:39,325 --> 00:01:42,250
+24
+00:01:50,715 --> 00:01:53,640
 The reviewer's findings went back to the builder.
 
-23
-00:01:42,600 --> 00:01:43,200
+25
+00:01:53,990 --> 00:01:54,590
 And hooks.
 
-24
-00:01:43,200 --> 00:01:49,800
+26
+00:01:54,590 --> 00:02:01,190
 When we asked Kiro to point the app at a plant address,
 the guard hook blocked the edit before it was written.
 
-25
-00:01:50,150 --> 00:01:56,550
+27
+00:02:01,540 --> 00:02:07,940
 Tests rerun on every save. Every Kiro session is logged
 with its tools, files and credits.
 
-26
-00:01:56,900 --> 00:02:01,367
+28
+00:02:08,290 --> 00:02:12,757
 GhostWire. Investigate the evidence before you touch a
 real system.
 
-27
-00:02:01,367 --> 00:02:03,300
+29
+00:02:12,757 --> 00:02:14,690
 Open source, and free to try.
 
