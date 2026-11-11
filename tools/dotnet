@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Run Windows .NET SDK from WSL (repo lives on /mnt/d); falls back to a Linux dotnet if present.
+if command -v dotnet.exe >/dev/null 2>&1; then exec dotnet.exe "$@"; fi
+if [ -x "/mnt/c/Program Files/dotnet/dotnet.exe" ]; then exec "/mnt/c/Program Files/dotnet/dotnet.exe" "$@"; fi
+exec dotnet "$@"

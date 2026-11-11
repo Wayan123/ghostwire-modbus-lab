@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Verify build on stop",
+      "description": "Runs `tools/dotnet build csharp/GhostWire/GhostWire.csproj -v q -nologo` when the agent stops. Only on build errors it prints {\"decision\":\"block\",\"reason\":\"<errors>\"} so the agent continues and fixes them.",
+      "trigger": "Stop",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/hooks/stop_build_check.py"
+      },
+      "timeout": 180
+    }
+  ]
+}

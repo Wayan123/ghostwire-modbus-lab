@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Guard: no physical Modbus targets",
+      "description": "Blocks (exit 2) writes to csharp/** that add a non-loopback IPv4 literal, 0.0.0.0, or a TcpClient/ConnectAsync host taken from request JSON. Fails open with a warning if the event cannot be parsed.",
+      "trigger": "PreToolUse",
+      "matcher": "^(fs_write|fs_append|str_replace)$",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/hooks/guard_targets.py"
+      },
+      "timeout": 30
+    }
+  ]
+}

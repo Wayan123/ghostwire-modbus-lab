@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run tests after C# change",
+      "description": "When the agent saves a csharp/**/*.cs file, run the GhostWire test harness and report the last 60 lines (exit code preserved) back to the agent.",
+      "trigger": "PostFileSave",
+      "matcher": "(^|/)csharp/.*\\.cs$",
+      "action": {
+        "type": "command",
+        "command": "bash -c 'set -o pipefail; tools/dotnet run --project csharp/GhostWire.Tests/GhostWire.Tests.csproj 2>&1 | tail -n 60'"
+      },
+      "timeout": 300
+    }
+  ]
+}

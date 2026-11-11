@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Sync judge quick start with scenarios",
+      "trigger": "PostFileSave",
+      "description": "After the agent saves Training.cs, asks the agent to update docs/judge-quick-start.md if scenario definitions changed.",
+      "matcher": "(^|/)csharp/GhostWire/Training\\.cs$",
+      "action": {
+        "type": "agent",
+        "prompt": "csharp/GhostWire/Training.cs was just saved. Run `git diff -- csharp/GhostWire/Training.cs` and check whether the scenario definitions changed: the `Cases` array (id, title, summary, initial settings, documentation, unit, function, address, value, requiredScale) or any added or removed scenario. If they did not change, do nothing and say so in one line. If they changed, update docs/judge-quick-start.md so every step matches the current scenarios: case titles, initial settings, the symptom the first read shows, the documented fix, and the expected verified result. Use only values the simulator actually produces (run the test harness if unsure) and keep the existing safety sentences. Do not edit any other file for this hook."
+      }
+    }
+  ]
+}
