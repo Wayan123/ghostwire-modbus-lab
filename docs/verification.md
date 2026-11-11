@@ -28,7 +28,18 @@ Observed in the local WSL environment using Windows .NET SDK 8.0.427 through `to
 - Emulated `prefers-reduced-motion: reduce` set the byte-highlight transition to 0s.
 - Emulated print media hid the investigation panels, kept case history, expanded the answer attempts, and `Page.printToPDF` rendered.
 
-Not checked: a screen reader, a real mobile device, a physical printer, startup failure injection for the incident generator (the code throws and the host resolves the service eagerly, but no harness check forces a mismatch), and the empty `frames` case for a request that was never written (not reproducible on a working loopback listener). The `ot-security-reviewer` agent review was not run in this session.
+Not checked: a screen reader, a real mobile device, a physical printer, startup failure injection for the incident generator (the code throws and the host resolves the service eagerly, but no harness check forces a mismatch), and the empty `frames` case for a request that was never written (not reproducible on a working loopback listener).
+
+### Security review
+
+The `ot-security-reviewer` agent reviewed commit 0b62fab against `safety.md` (session `sess_6771b137-8663-47a2-b2ec-149419fbbada`, see `docs/kiro-log/LEDGER.md`). It reported 0 critical, 0 high and 0 medium findings, 3 low findings and 2 info findings.
+
+- Low, `Modbus.cs` header mismatch: fixed in code. When the response header fails validation, `ModbusClient` keeps the 7 header bytes it received and the response frame's `decode_error` now reads, for example, `Client stopped after header: transaction ID mismatch. Only the 7 header bytes received were kept.` Before the fix, the decoder reported a "Truncated frame" error, which made it look as if the simulator had sent a short frame. A new harness check uses a loopback fake server that replies with transaction ID 2 and asserts that error text and the received bytes `00 02 00 00 00 05 07`.
+- Low, `docs/video/storyboard.md` opening line: the narration now starts "In this simulation", and the shot description names the on-screen text "Status: response" instead of a color change.
+- Low, `docs/video/storyboard.md` Phantom Writer line: the narration now says "then see real-world guidance that this simulation does not verify".
+- The two info findings (learner `client` text in the AI prompt, `DisposeAsync` not awaiting in-flight handlers) were not changed.
+
+After the fix, `tools/dotnet run --project csharp/GhostWire.Tests/GhostWire.Tests.csproj` printed `PBT seed used: 1616322598`, `Check calls passed: 26672` and `All GhostWire protocol and HTTP checks passed.` It ran with `-p:BaseOutputPath` set to a Windows temp folder because a running `GhostWire.exe` held a lock on the default `bin` output.
 
 ## Windows x64 executable package, 2026-11-10
 

@@ -53,6 +53,29 @@ await using (var simulator = new ModbusSimulator(7, new Dictionary<int, Dictiona
     Check(refused, "client refuses function 6");
 }
 
+// A loopback fake server replies with transaction ID 2 instead of 1. The client must stop after the header
+// and the response frame must say so, not report a truncated simulator reply.
+{
+    var fake = new TcpListener(IPAddress.Loopback, 0);
+    fake.Start();
+    int fakePort = ((IPEndPoint)fake.LocalEndpoint).Port;
+    var serve = Task.Run(async () =>
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        using var peer = await fake.AcceptTcpClientAsync(deadline.Token);
+        using var stream = peer.GetStream();
+        await stream.ReadExactlyAsync(new byte[12], deadline.Token);
+        await stream.WriteAsync(new byte[] { 0,2,0,0,0,5,7,3,2,0,39 }, deadline.Token);
+        try { await stream.ReadAsync(new byte[1], deadline.Token); } catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
+    });
+    var mismatched = await ModbusClient.ReadAsync(fakePort, 7, 3, 10, 1, CancellationToken.None);
+    await serve;
+    fake.Stop();
+    var mismatchFrames = TrainingService.BuildFrames(mismatched.Exchange, 10);
+    Check(mismatched.Status == "error" && ModbusCodec.Hex(mismatched.Exchange.Received!) == "00 02 00 00 00 05 07", "header mismatch keeps the 7 header bytes received");
+    Check(mismatchFrames.Count == 2 && mismatchFrames[1].decode_error == "Client stopped after header: transaction ID mismatch. Only the 7 header bytes received were kept.", $"header mismatch decode_error: {mismatchFrames.LastOrDefault()?.decode_error}");
+}
+
 // Simulator recorder and the allowWrites option. Writes here hit only an in-memory harness simulator.
 {
     var recorder = new ListRecorder();

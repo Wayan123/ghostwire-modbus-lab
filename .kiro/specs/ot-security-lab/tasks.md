@@ -114,7 +114,7 @@ Run the harness after every task from the repository root: `tools/dotnet run --p
   - Update `docs/verification.md` with the checks actually observed, including the printed PBT seed.
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 14. Final verification and safety review
+- [x] 14. Final verification and safety review
   - Run the build and the harness; record the output.
   - Perform the keyboard-only, reduced-motion and print manual checks from the design and record what was checked.
   - Ask the `ot-security-reviewer` agent to review the diff against `safety.md`; resolve findings.

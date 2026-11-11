@@ -319,7 +319,8 @@ public static class ModbusCodec
     }
 }
 
-public sealed record ModbusExchange(byte[]? Sent, byte[]? Received);
+// ClientStop is set when the client deliberately stopped reading, so Received holds only the bytes read so far.
+public sealed record ModbusExchange(byte[]? Sent, byte[]? Received, string? ClientStop = null);
 public sealed record ModbusResult(string Status, ushort[] Values, int? ExceptionCode, ModbusExchange Exchange);
 
 public static class ModbusClient
@@ -330,7 +331,8 @@ public static class ModbusClient
         if (function is not (3 or 4)) throw new ArgumentOutOfRangeException(nameof(function), "ModbusClient sends only FC03 and FC04 reads");
         var request = ModbusCodec.EncodeReadRequest(1, (byte)unit, (byte)function, (ushort)address, (ushort)quantity);
         byte[]? sent = null, received = null;
-        ModbusResult Result(string status, ushort[] values, int? code) => new(status, values, code, new(sent, received));
+        string? clientStop = null;
+        ModbusResult Result(string status, ushort[] values, int? code) => new(status, values, code, new(sent, received, clientStop));
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(300));
         try
@@ -344,8 +346,16 @@ public static class ModbusClient
             await stream.ReadExactlyAsync(header, deadline.Token);
             received = header;
             int length = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(4));
-            if (BinaryPrimitives.ReadUInt16BigEndian(header) != 1 || BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2)) != 0 || header[6] != unit || length < 2 || length > 254)
+            var mismatches = new List<string>();
+            if (BinaryPrimitives.ReadUInt16BigEndian(header) != 1) mismatches.Add("transaction ID");
+            if (BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2)) != 0) mismatches.Add("protocol ID");
+            if (header[6] != unit) mismatches.Add("unit ID");
+            if (length < 2 || length > 254) mismatches.Add("length");
+            if (mismatches.Count > 0)
+            {
+                clientStop = $"Client stopped after header: {string.Join(", ", mismatches)} mismatch. Only the 7 header bytes received were kept.";
                 return Result("error", Array.Empty<ushort>(), null);
+            }
             var pdu = new byte[length - 1];
             await stream.ReadExactlyAsync(pdu, deadline.Token);
             received = header.Concat(pdu).ToArray();

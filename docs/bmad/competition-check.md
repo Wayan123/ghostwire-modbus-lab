@@ -1,13 +1,14 @@
-# Kiroween 2026 — competition checks
+# Kiroween 2026: competition checks
 
-Retrieved 2026-11-10 from the Devpost MCP official rules and submission requirements.
+Retrieved 2026-11-11 via the Devpost MCP server (official rules, submission requirements, judging criteria, key dates, announcements).
 
-- Rules, Project Requirements: “Entrants must build a working software application using Kiro (IDE, CLI, Web, and/or Kiro Crew)” and “Insufficient use of Kiro will result in disqualification at the Judges’ sole discretion.” Evidence must describe actual use.
-- Rules, New Projects Only: “Projects must be newly created by the Entrant after the start of the Hackathon Submission Period.” Nonstandard pre-existing work must be disclosed.
-- Rules require a functional application URL, public GitHub repository with open-source license and root `.kiro`, a text description, and a demonstration video publicly visible on YouTube. Submission form accepts a working demo, hosted application or test build URL.
-- Rules say video “should be less than three (3) minutes” and judges need not watch beyond three minutes. The submission form asks for YouTube; keep under three minutes and public to satisfy stricter official rules.
-- Official rules' geographic exclusion examples retrieved via MCP did not explicitly list Indonesia; the required Country of Residence field's description explicitly says “Excluded countries: ... Indonesia ...”. The same rules state official rules prevail in a discrepancy and advise requesting clarification for ambiguities. Do not assume individual or organization eligibility; obtain organizer clarification before submitting. User residence is not inferred.
-- Deadline observed via Devpost key dates: 2026-12-04 22:00 UTC (2026-12-05 05:00 WIB). Recheck dates and announcements before submission.
-- Project/publication state: local project only. No GitHub publication, deployment, YouTube upload, submission, or organizer message is authorized by this work request.
-
-Sources: https://kiroween.devpost.com/rules and https://kiroween.devpost.com/ .
+- **Eligibility:** the Nov 11 announcement says "Indonesia is now eligible. Residents of Indonesia are now eligible to participate. The Official Rules have been updated, and a Bahasa Indonesia translation is available." The earlier discrepancy is resolved. The rules allow teams of up to 3; this is a solo entry.
+- **Kiro:** "Entrants must build a working software application using Kiro (IDE, CLI, Web, and/or Kiro Crew)… Insufficient use of Kiro will result in disqualification." Evidence: `docs/kiro-usage.md` and `docs/kiro-log/`.
+- **New projects:** the repository was created 2026-11-10, inside the submission period (Oct 30 – Dec 4). The pre-Kiro baseline is disclosed in `existing-code-disclosure.md`. The other draft, "PLC Frankenstein", is built on multi-plc-agent (created 2026-10-27) and should not be submitted.
+- **Repository:** public GitHub, Apache-2.0 detected in About, `/.kiro` at root and not in `.gitignore`.
+- **App URL:** the rules allow a "functional application" or test-build URL. Plan: a GitHub Release with the Windows zip and instructions.
+- **Video:** "less than three (3) minutes", public on YouTube, shows the project working, no unlicensed music or trademarks. The submission checklist also asks: "Does it show how you used Kiro?"
+- **Deadline:** 2026-12-04 14:00 PT (2026-12-05 05:00 WIB). The submission locks after that, so do not change the repo, video or app until winners are announced (around Feb 3, 2027). Kiro credit requests close Dec 1 12:00 PT.
+- **Judging criteria:** Potential Impact, Technological Implementation (Kiro), Design, Innovation/Idea, Presentation.
+- **Category:** Frankenstein.
+- **Bonus prizes:** Social Blitz (post must start with `#KiroweenHackathon26`) and Blog (must say it is written as part of Kiroween 2026). Best Demo needs no extra steps.

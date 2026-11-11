@@ -94,7 +94,12 @@ public sealed class TrainingService : IAsyncDisposable
         var frames = new List<DecodedFrame>();
         if (exchange.Sent == null) return frames;
         frames.Add(ModbusCodec.Decode(exchange.Sent, FrameDirection.Request));
-        if (exchange.Received != null) frames.Add(ModbusCodec.Decode(exchange.Received, FrameDirection.Response, requestAddress));
+        if (exchange.Received != null)
+        {
+            var response = ModbusCodec.Decode(exchange.Received, FrameDirection.Response, requestAddress);
+            // A client stop explains the short frame; the decoder alone would report it as a truncated simulator reply.
+            frames.Add(exchange.ClientStop == null ? response : response with { decode_error = exchange.ClientStop });
+        }
         return frames;
     }
 
