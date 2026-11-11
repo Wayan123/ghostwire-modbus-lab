@@ -10,6 +10,7 @@ const categories = [
 ];
 let scenarios = [];
 let history = [];
+const caseHistory = new Map();
 let running = false;
 
 function text(value, fallback = 'Not returned') {
@@ -72,16 +73,21 @@ function selectScenario() {
   $('scenario-summary').textContent = text(scenario.summary, '');
   renderDocumentation(scenario.documentation);
   $('history-scenario').textContent = `Scenario: ${text(scenario.title)}`;
-  for (const field of fields) $(field).value = scenario.initial[field];
+  history = caseHistory.get(scenario.id) || [];
+  const latest = history[history.length - 1];
+  for (const field of fields) $(field).value = latest?.request?.[field] ?? scenario.initial[field];
   validateScale();
-  history = [];
-  $('result').hidden = true;
-  $('empty-result').hidden = false;
-  $('result-status').textContent = 'Awaiting read';
-  $('result-status').dataset.state = '';
+  if (latest) {
+    renderResult(latest);
+  } else {
+    $('result').hidden = true;
+    $('empty-result').hidden = false;
+    $('result-status').textContent = 'Awaiting read';
+    $('result-status').dataset.state = '';
+  }
   $('test-message').dataset.state = '';
   $('test-message').textContent = '';
-  $('run-test').textContent = 'Run simulated read';
+  $('run-test').textContent = latest ? 'Retest simulated read' : 'Run simulated read';
   renderHistory();
 }
 
@@ -136,12 +142,43 @@ function renderResult(result) {
   $('explanation').textContent = text(result.explanation, 'No explanation returned.');
   $('explanation-source').textContent = sourceText(result.explanation_source);
 }
+function renderComparison() {
+  const container = $('comparison-results');
+  container.replaceChildren();
+  const hasComparison = history.length >= 2;
+  $('comparison-empty').hidden = hasComparison;
+  container.hidden = !hasComparison;
+  if (!hasComparison) return;
+
+  const previous = history[history.length - 2];
+  const current = history[history.length - 1];
+  for (const [label, entry, number] of [
+    ['Previous', previous, history.length - 1],
+    ['Current', current, history.length],
+  ]) {
+    const section = document.createElement('section');
+    section.className = 'comparison-read';
+    addText(section, 'h3', `${label} · read ${number}`);
+    const request = entry.request || {};
+    addText(section, 'p', `Request: unit ${text(request.unit_id)}, function ${text(request.function_code)}, address ${text(request.address)}, quantity ${text(request.quantity)}, scale ${text(request.scale)}.`);
+    addText(section, 'p', `Status: ${text(entry.status, 'unknown')}. Raw registers: ${text(entry.raw_registers)}. Engineering value: ${engineeringValue(entry)} (simulated).`);
+    addText(section, 'p', verifiedText(entry.verified));
+    container.append(section);
+  }
+  const changed = fields.filter((field) => previous.request?.[field] !== current.request?.[field]);
+  const labels = { unit_id: 'Unit ID', function_code: 'Function code', address: 'Address', quantity: 'Quantity', scale: 'Scale' };
+  addText(container, 'p', changed.length
+    ? `Changed settings: ${changed.map((field) => `${labels[field]} (${text(previous.request?.[field])} to ${text(current.request?.[field])})`).join(', ')}.`
+    : 'No request settings changed between these reads.', 'comparison-changes');
+}
+
 
 function renderHistory() {
   const list = $('history-list');
   list.replaceChildren();
   $('history-empty').hidden = history.length > 0;
   $('print-report').disabled = history.length === 0;
+  renderComparison();
   history.forEach((entry, index) => {
     const item = document.createElement('li');
     const details = document.createElement('details');
@@ -195,7 +232,9 @@ $('test-form').addEventListener('submit', async (event) => {
   $('test-message').dataset.state = '';
   try {
     const result = await api('/api/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    if (!result.request) result.request = request;
     history.push(result);
+    caseHistory.set(request.scenario_id, history);
     renderResult(result);
     renderHistory();
     $('run-test').textContent = 'Retest simulated read';

@@ -7,4 +7,6 @@ __pycache__/
 !.env.example
 node_modules/
 dist/
+bin/
+obj/
 .DS_Store

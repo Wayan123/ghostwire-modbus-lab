@@ -40,6 +40,13 @@ h3 { margin-bottom: .5rem; font-size: .95rem; }
 .lede { color: var(--muted); margin-bottom: 0; max-width: 40rem; }
 .scope-note { margin: 0; padding: 1rem; border: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
 .scope-note strong { color: var(--ink); }
+.workflow { margin: 0 0 1.5rem; border-block: 1px solid var(--line); }
+.workflow ol { display: grid; gap: .75rem; margin: 0; padding: 1rem 0; list-style: none; counter-reset: workflow; }
+.workflow li { display: grid; grid-template-columns: 2rem 1fr; column-gap: .5rem; padding: 0; counter-increment: workflow; }
+.workflow li + li { margin: 0; }
+.workflow li::before { grid-row: span 2; color: var(--accent); font-weight: 800; content: counter(workflow, decimal-leading-zero); }
+.workflow strong { line-height: 1.3; }
+.workflow span { color: var(--muted); font-size: .8rem; }
 .layout { display: grid; gap: 1rem; align-items: start; }
 .results-column { display: grid; gap: 1rem; min-width: 0; }
 .panel { min-width: 0; padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); }
@@ -89,6 +96,11 @@ li + li { margin-top: .4rem; }
 .explanation { background: var(--paper); padding: 1rem; }
 .explanation-heading { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .5rem; }
 .explanation p { margin: .5rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comparison-results { display: grid; gap: 1rem; }
+.comparison-read { min-width: 0; padding: 1rem; background: var(--paper); border: 1px solid var(--line); }
+.comparison-read h3 { color: var(--forest); }
+.comparison-read p { margin: .5rem 0 0; font-size: .875rem; overflow-wrap: anywhere; }
+.comparison-changes { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
 .history-list { padding: 0; margin: 0; list-style: none; counter-reset: none; }
 .history-list > li { padding: 0; border-top: 1px solid var(--line); }
 .history-list > li + li { margin-top: 0; }
@@ -102,17 +114,21 @@ footer { padding: 1.25rem 1rem; border-top: 1px solid var(--line); color: var(--
   .page { padding-inline: 2rem; }
   .fields, .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field-wide { grid-column: 1 / -1; }
+  .workflow ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .comparison-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .comparison-changes { grid-column: 1 / -1; }
   .reading { grid-template-columns: 1fr 1fr; }
   .panel { padding: 1.5rem; }
 }
 @media (min-width: 58rem) {
   .page { padding-inline: clamp(2rem, 4vw, 4rem); }
   .intro { grid-template-columns: minmax(0, 1fr) minmax(15rem, 22rem); align-items: end; }
+  .workflow ol { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .layout { grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr); }
 }
 @media print {
   :root { color-scheme: light; --ink: #111; --muted: #333; --paper: white; --surface: white; --line: #555; --forest: #111; --forest-dark: white; --soft: white; --success: #111; --error: #111; color: black; background: white; }
-  .skip-link, button, form, select, .documentation summary { display: none !important; }
+  .skip-link, button, .workflow, .setup, .evidence { display: none !important; }
   .page { max-width: none; padding: 0; }
   .layout, .intro { display: block; }
   .panel, .scope-note { border: 0; padding: .5rem 0; break-inside: avoid; }

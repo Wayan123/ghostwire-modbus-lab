@@ -17,21 +17,29 @@
   <main id="workspace" class="page">
     <div class="intro">
       <div><p class="eyebrow">CONTROL ROOM / SIMULATED MODBUS TCP</p><h1>Investigate the signal.</h1><p class="lede">A factory signal is in question. Read the simulator, inspect the evidence, adjust a setting, and retest.</p></div>
-      <p class="scope-note"><strong>Controlled environment</strong><br>Requests go only to the local simulator. No physical devices, network scanning, or Modbus writes.</p>
+      <p class="scope-note"><strong>Local training environment</strong><br>Protocol reads reach only a simulator on this computer. No physical devices, network scanning, or Modbus writes.</p>
     </div>
+    <nav class="workflow" aria-label="How to investigate">
+      <ol>
+        <li><strong>Inspect</strong><span>Choose a case and read its documentation.</span></li>
+        <li><strong>Run</strong><span>Send the initial simulated read.</span></li>
+        <li><strong>Adjust</strong><span>Compare the evidence with the documentation.</span></li>
+        <li><strong>Retest</strong><span>Run again and compare the results.</span></li>
+      </ol>
+    </nav>
     <div class="layout">
       <section class="panel setup" aria-labelledby="setup-title">
-        <div class="section-heading"><div><p class="eyebrow">01 / CONFIGURE</p><h2 id="setup-title">Test setup</h2></div></div>
-        <p class="muted">Choose a case and compare the request with its simulator documentation.</p>
+        <div class="section-heading"><div><p class="eyebrow">01 / INSPECT &amp; RUN</p><h2 id="setup-title">Choose your case</h2></div></div>
+        <p class="muted">Each case starts with a questionable setting. Inspect the simulated device documentation, then run the read as given.</p>
         <div id="load-message" class="notice" role="status">Loading scenarios…</div>
         <button id="retry-load" class="secondary" type="button" hidden>Retry loading scenarios</button>
         <div id="setup-content" hidden>
           <label for="scenario">Training scenario</label>
-          <select id="scenario"></select>
+          <select id="scenario" aria-describedby="scenario-summary"></select>
           <p id="scenario-summary" class="scenario-summary"></p>
-          <details class="documentation" open><summary>Simulator documentation</summary><div id="documentation" class="doc-content"></div></details>
+          <details class="documentation" open><summary>Inspect simulated device documentation</summary><div id="documentation" class="doc-content"></div></details>
           <form id="test-form">
-            <fieldset id="request-fields"><legend>Read request</legend>
+            <fieldset id="request-fields"><legend>Read request settings</legend>
               <div class="fields">
                 <div><label for="unit_id">Unit ID</label><input id="unit_id" name="unit_id" type="number" min="1" max="247" step="1" required></div>
                 <div><label for="function_code">Function code</label><select id="function_code" name="function_code"><option value="3">03 · Holding registers</option><option value="4">04 · Input registers</option></select></div>
@@ -47,30 +55,37 @@
       </section>
       <div class="results-column">
         <section class="panel evidence" aria-labelledby="evidence-title">
-          <div class="section-heading"><div><p class="eyebrow">02 / EXAMINE</p><h2 id="evidence-title">Evidence &amp; interpretation</h2></div><span id="result-status" class="status">Awaiting read</span></div>
+          <div class="section-heading"><div><p class="eyebrow">02 / EXAMINE &amp; ADJUST</p><h2 id="evidence-title">Evidence &amp; interpretation</h2></div><span id="result-status" class="status" role="status">Awaiting read</span></div>
           <div id="empty-result" class="empty-state"><strong>No read yet</strong><p>Run a simulated read to see the response and investigation notes here.</p></div>
+          <p class="muted">This panel shows the latest completed read, not unsent changes to the settings.</p>
           <div id="result" hidden>
             <div class="reading"><div><span class="reading-label">ENGINEERING VALUE</span><strong id="engineering-value">Not returned</strong><span class="reading-caption">Simulated measurement</span></div><div class="raw-reading"><span class="reading-label">RAW REGISTERS</span><strong id="raw-registers">Not returned</strong></div></div>
             <div class="evidence-grid">
               <section><h3>Observations <span>Protocol evidence</span></h3><ul id="observations"></ul></section>
               <section><h3>Possible causes <span>Hypotheses, not proof</span></h3><ul id="possible_causes"></ul></section>
-              <section><h3>Training hints</h3><ul id="training_hints"></ul></section>
-              <section><h3>Next steps</h3><ul id="next_steps"></ul></section>
+              <section><h3>Training hints <span>Specific to this simulator</span></h3><ul id="training_hints"></ul></section>
+              <section><h3>Next steps <span>Suggested actions, not proof</span></h3><ul id="next_steps"></ul></section>
             </div>
             <div class="verification"><span class="reading-label">VERIFICATION</span><p id="verified"></p></div>
             <section class="explanation"><div class="explanation-heading"><h3>Explanation</h3><span id="explanation-source" class="source"></span></div><p id="explanation"></p></section>
           </div>
         </section>
+        <section class="panel comparison" aria-labelledby="comparison-title">
+          <div class="section-heading"><div><p class="eyebrow">03 / RETEST</p><h2 id="comparison-title">Previous vs current</h2></div></div>
+          <p class="muted">Compare the last two completed reads for this case. A response alone does not verify a diagnosis.</p>
+          <p id="comparison-empty" class="empty-history">Run a read, adjust a setting, and retest to compare results.</p>
+          <div id="comparison-results" class="comparison-results" hidden></div>
+        </section>
         <section class="panel history" aria-labelledby="history-title">
-          <div class="section-heading"><div><p class="eyebrow">03 / REVIEW</p><h2 id="history-title">Case history</h2></div><button id="print-report" class="secondary" type="button" disabled>Print report</button></div>
+          <div class="section-heading"><div><p class="eyebrow">04 / REVIEW</p><h2 id="history-title">Case history &amp; report</h2></div><button id="print-report" class="secondary" type="button" disabled>Print case report</button></div>
           <p id="history-scenario" class="history-scenario"></p>
-          <p class="muted">Recorded in this browser session. Selecting another scenario clears this case.</p>
+          <p class="muted">Completed reads are kept per case until this page is reloaded. The printed report includes this case's recorded reads.</p>
           <p id="history-empty" class="empty-history">No tests recorded. Each completed read will appear here.</p>
           <ol id="history-list" class="history-list"></ol>
         </section>
       </div>
     </div>
   </main>
-  <footer>GhostWire training lab <span>·</span> All values shown are simulated.</footer>
+  <footer>GhostWire training lab <span>·</span> All values are simulated. Real systems require device documentation and qualified human review; emergency stops and protective functions need independent safety design.</footer>
 </body>
 </html>

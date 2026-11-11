@@ -1,5 +1,7 @@
 # GhostWire implementation plan
 
+> Historical plan for the first Python implementation. The active C# migration plan is `csharp-migration.md`.
+
 ## Product and boundaries
 Interactive, simulation-only Modbus troubleshooting: observe → inspect evidence → change one setting → retest. Three scenarios: pressure scaling, silent unit ID and register addressing. Distinguish actual protocol outcomes, hypotheses, training hints and verification. No physical-device access or Modbus writes.
 
