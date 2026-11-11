@@ -151,6 +151,29 @@ await using (var simulator = new ModbusSimulator(7, new Dictionary<int, Dictiona
     Check(write.sequence == 8 && write.transaction_id == 1111 && write.client == "MAINT-LAPTOP-07" && write.time == "2026-10-31T02:13:33Z" && write.values.SequenceEqual(new ushort[] { 950 }), "generator write entry");
     Check(write.frames[0].hex == "04 57 00 00 00 06 05 06 00 64 03 B6" && write.frames[1].hex == write.frames[0].hex, "captured FC06 request and echo");
     Check(log.entries.Take(7).All(e => e.values[0] == 650) && log.entries.Skip(8).All(e => e.values[0] == 950), "values before and after the write");
+    Check(log.entries.All(e => e.status == "response" && e.exception_code == null), "Phantom Writer entries are responses with no exception code");
+}
+
+// Night Scanner generator, default plan: real loopback exchanges with a private gateway, including real timeouts.
+{
+    using var generatorDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    var log = await IncidentLogGenerator.GenerateNightScannerAsync(NightScannerPlan.Default, generatorDeadline.Token);
+    long elapsed = watch.ElapsedMilliseconds;
+    var polls = log.entries.Where(e => e.client == "HMI-01").ToArray();
+    var scan = log.entries.Where(e => e.client == "ENG-WS-13").ToArray();
+    Check(log.entries.Count == 15 && polls.Length == 5 && scan.Length == 10, $"Night Scanner default log has 5 polls and 10 scan requests, got {polls.Length}/{scan.Length}");
+    Check(log.entries.All(e => e.function_code == 3), "Night Scanner log contains only FC03");
+    Check(polls.All(e => e.unit_id == 5 && e.address == 100 && e.status == "response" && e.values.SequenceEqual(new ushort[] { 650 })), "HMI polls read 650 from unit 5");
+    Check(scan.Select(e => e.unit_id).SequenceEqual(Enumerable.Range(1, 10)) && scan.Select(e => e.transaction_id).SequenceEqual(Enumerable.Range(301, 10)) && scan.All(e => e.address == 0), "scan reads address 0 from units 1-10 with transactions 301-310");
+    Check(scan.Count(e => e.status == "timeout") == 8 && scan.Where(e => e.status == "timeout").All(e => e.frames.Count == 1 && e.values.Length == 0), "8 scan timeouts with only the request frame");
+    var unit5 = scan.Single(e => e.unit_id == 5);
+    Check(unit5.status == "exception" && unit5.exception_code == 2 && unit5.frames[1].hex == "01 31 00 00 00 03 05 83 02", $"unit 5 scan returns exception 02: {unit5.frames.Last().hex}");
+    var unit9 = scan.Single(e => e.unit_id == 9);
+    Check(unit9.status == "response" && unit9.values.SequenceEqual(new ushort[] { 1 }) && unit9.frames[1].hex == "01 35 00 00 00 05 09 03 02 00 01", $"unit 9 answers: {unit9.frames.Last().hex}");
+    Check(scan[0].time == "2026-11-01T03:12:07Z" && scan[^1].time == "2026-11-01T03:12:16Z" && scan[0].frames[0].hex == "01 2D 00 00 00 06 01 03 00 00 00 01", $"first scan request {scan[0].time} {scan[0].frames[0].hex}");
+    Check(Diagnosis.AnswerEntry(log) == scan[0], "answer entry is the first scan request");
+    Console.WriteLine($"Observed Night Scanner capture ({elapsed} ms): " + string.Join("; ", log.entries.Select(e => $"#{e.sequence} {e.time[11..19]} {e.client} tx {e.transaction_id} unit {e.unit_id} {e.status}{(e.exception_code is int code ? $" {code:D2}" : "")}{(e.values.Length > 0 ? $" [{string.Join(",", e.values)}]" : "")}")));
 }
 
 Console.WriteLine($"PBT seed: {Pbt.BaseSeed} (0x{Pbt.BaseSeed:X}){(Environment.GetEnvironmentVariable("GHOSTWIRE_PBT_SEED") is { Length: > 0 } ? " from GHOSTWIRE_PBT_SEED" : " (default)")}");
@@ -330,17 +353,49 @@ await Pbt.Property("P-d timeout diagnosis is never certain", 400, (rng, c) =>
     return () => Task.CompletedTask;
 });
 
+// P-f: each case captures a full Night Scanner log over loopback (up to 11 real 100 ms timeouts), so it runs fewer cases, 8 at a time.
+await Pbt.Property("P-f night scanner capture", 48, (rng, c) =>
+{
+    var plan = NightScannerPlan.FromSeed(rng.Next());
+    c.Input = plan.ToString();
+    return async () =>
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var log = await IncidentLogGenerator.GenerateNightScannerAsync(plan, deadline.Token);
+        var scan = log.entries.Where(e => e.client == plan.ScannerClient).OrderBy(e => e.sequence).ToArray();
+        Check(scan.Zip(scan.Skip(1), (a, b) => b.unit_id > a.unit_id).All(x => x), "scanning client's unit IDs strictly increase");
+        Check(scan.Select(e => e.unit_id).SequenceEqual(Enumerable.Range(1, plan.ScanUnits)), "scan covers unit IDs 1..N");
+        Check(scan.Count(e => e.status == "response") == 1 && scan.Single(e => e.status == "response").unit_id == plan.RespondingUnit, "exactly one scan response, from the responding unit");
+        Check(scan.Single(e => e.unit_id == 5) is { status: "exception", exception_code: 2 }, "unit 5 returns exception 02 to the scan");
+        Check(scan.Where(e => e.unit_id != 5 && e.unit_id != plan.RespondingUnit).All(e => e.status == "timeout" && e.frames.Count == 1), "every other scan request is a timeout with only the request frame");
+        Check(log.entries.Select(e => e.transaction_id).Distinct().Count() == log.entries.Count, "transaction IDs are unique");
+        var labels = log.entries.Select(e => e.client).Distinct().ToArray();
+        var verified = new List<(int, string)>();
+        foreach (var e in log.entries)
+            foreach (var label in labels.Concat(labels.Select(l => l.ToLowerInvariant())).Distinct())
+                if (Diagnosis.ForAnswer(log, new AnswerRequest(log.scenario_id, e.transaction_id, label)).Verified) verified.Add((e.transaction_id, label.ToUpperInvariant()));
+        Check(verified.Distinct().Count() == 1 && verified[0] == (plan.ScanFirstTransactionId, plan.ScannerClient.ToUpperInvariant()), $"exactly one answer pair verifies, got [{string.Join(", ", verified.Distinct())}]");
+    };
+}, batch: 8);
+
 await using var app = GhostWireHost.Create(Array.Empty<string>(), 0);
 await app.StartAsync();
 var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
 using var client = new HttpClient { BaseAddress = new Uri(address) };
 var scenarios = await client.GetFromJsonAsync<JsonElement>("/api/scenarios");
-Check(scenarios.GetProperty("scenarios").GetArrayLength() == 4, "four scenarios");
-foreach (var (id, category, difficulty) in new[] { ("pressure-scaling", "troubleshooting", "beginner"), ("unit-id", "troubleshooting", "beginner"), ("register-addressing", "troubleshooting", "intermediate"), ("phantom-writer", "security", "intermediate") })
+Check(scenarios.GetProperty("scenarios").GetArrayLength() == 5, "five scenarios");
+foreach (var (id, category, difficulty) in new[] { ("pressure-scaling", "troubleshooting", "beginner"), ("unit-id", "troubleshooting", "beginner"), ("register-addressing", "troubleshooting", "intermediate"), ("phantom-writer", "security", "intermediate"), ("night-scanner", "security", "intermediate") })
 {
     var entry = scenarios.GetProperty("scenarios").EnumerateArray().Single(s => s.GetProperty("id").GetString() == id);
     Check(entry.GetProperty("category").GetString() == category && entry.GetProperty("difficulty").GetString() == difficulty, $"{id} category and difficulty");
     foreach (var name in new[] { "title", "summary", "initial", "documentation" }) Check(entry.TryGetProperty(name, out _), $"{id} keeps {name}");
+    Check(category == "security" ? entry.GetProperty("incident").GetProperty("hints").GetArrayLength() == 2 : entry.GetProperty("incident").ValueKind == JsonValueKind.Null, $"{id} incident UI field");
+}
+{
+    var scanUi = scenarios.GetProperty("scenarios").EnumerateArray().Single(s => s.GetProperty("id").GetString() == "night-scanner").GetProperty("incident");
+    Check(scanUi.GetProperty("hints")[0].GetString() == "Look at the Unit ID column: does any client ask many different units?" && scanUi.GetProperty("hints")[1].GetString() == "Find the first request in that run." && scanUi.GetProperty("flag").GetString() == "⚠ First scan request", "Night Scanner hints and flag");
+    var writerUi = scenarios.GetProperty("scenarios").EnumerateArray().Single(s => s.GetProperty("id").GetString() == "phantom-writer").GetProperty("incident");
+    Check(writerUi.GetProperty("hints")[0].GetString() == "Look at the Function column: which entry changes data instead of reading it?" && writerUi.GetProperty("flag").GetString() == "⚠ Unauthorized write", "Phantom Writer hints unchanged");
 }
 Check((await client.GetAsync("/")).StatusCode == HttpStatusCode.OK, "frontend served");
 object P(string id, int unit, int fc, int addr, int qty, double scale) => new { scenario_id = id, unit_id = unit, function_code = fc, address = addr, quantity = qty, scale };
@@ -414,6 +469,8 @@ foreach (var entry in logEntries)
     Check(JsonSerializer.Serialize(first.IncidentLog("phantom-writer")) == JsonSerializer.Serialize(second.IncidentLog("phantom-writer")), "traffic log is identical across independent starts");
 }
 using (var response = await client.GetAsync("/api/incident/unit-id/log")) Check(response.StatusCode == HttpStatusCode.NotFound, "log 404 for a troubleshooting case");
+using (var response = await client.GetAsync("/api/incident/night-scanner/log")) Check(response.StatusCode == HttpStatusCode.OK, "Night Scanner log is served");
+using (var response = await client.GetAsync("/api/incident/NIGHT-SCANNER/log")) Check(response.StatusCode == HttpStatusCode.NotFound, "log ids match exactly");
 using (var response = await client.GetAsync("/api/incident/../log")) Check(response.StatusCode == HttpStatusCode.NotFound, "log 404 for a path-traversal id");
 using (var response = await client.GetAsync("/api/incident/%2E%2E%2Fscenarios/log")) Check(response.StatusCode == HttpStatusCode.NotFound, "log 404 for an encoded traversal id");
 
@@ -438,6 +495,69 @@ foreach (var (tx, label, name) in new[] { (1111, "HMI-01", "right transaction, w
     Check(wrongAnswer.Body.GetProperty("observations").GetArrayLength() >= 1, $"{name} has an observation");
 }
 Check((await Answer(AnswerJson(4242, "X"))).Body.GetProperty("observations")[0].GetString() == "No transaction 4242 appears in this simulated capture.", "missing transaction observation");
+
+// The Night Scanner over HTTP: learner read, read-only gateway, log endpoint and answers.
+{
+    var scanRead = await Post(client, P("night-scanner",5,3,100,1,0.1));
+    Check(scanRead.GetProperty("status").GetString() == "response" && scanRead.GetProperty("raw_registers")[0].GetInt32() == 650 && Math.Abs(scanRead.GetProperty("engineering_value").GetDouble() - 65.0) < 1e-10
+        && scanRead.GetProperty("unit").GetString() == "°C" && scanRead.GetProperty("verified").GetBoolean(), "Night Scanner read returns 650 (65 °C)");
+    Check(scanRead.GetProperty("training_hints").EnumerateArray().Any(h => h.GetString()!.Contains("not which other clients queried the gateway")), "Night Scanner read hint points to the traffic log");
+    var scanTimeout = await Post(client, P("night-scanner",1,3,0,1,1));
+    Check(scanTimeout.GetProperty("status").GetString() == "timeout" && scanTimeout.GetProperty("frames").GetArrayLength() == 1, "learner gateway: unit 1 times out like the log");
+    var scanUnit9 = await Post(client, P("night-scanner",9,3,0,1,1));
+    Check(scanUnit9.GetProperty("status").GetString() == "response" && scanUnit9.GetProperty("raw_registers")[0].GetInt32() == 1, "learner gateway: unit 9 answers like the log");
+    var scanUnit5 = await Post(client, P("night-scanner",5,3,0,1,1));
+    Check(scanUnit5.GetProperty("status").GetString() == "exception" && FrameField(scanUnit5.GetProperty("frames")[1], "Exception code") == "02 · Illegal Data Address", "learner gateway: unit 5 address 0 returns exception 02 like the log");
+    Console.WriteLine($"Observed Night Scanner read: raw {scanRead.GetProperty("raw_registers")[0].GetInt32()}, value {scanRead.GetProperty("engineering_value").GetDouble()} {scanRead.GetProperty("unit").GetString()}, response {scanRead.GetProperty("frames")[1].GetProperty("hex").GetString()}");
+
+    int gatewayPort = service.SimulatorPort("night-scanner");
+    using var tcp = new TcpClient();
+    using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+    await tcp.ConnectAsync(IPAddress.Loopback, gatewayPort, deadline.Token);
+    using var stream = tcp.GetStream();
+    await stream.WriteAsync(ModbusCodec.EncodeWriteSingleRequest(1, 5, 100, 1), deadline.Token);
+    byte[] header = new byte[7];
+    await stream.ReadExactlyAsync(header, deadline.Token);
+    byte[] body = new byte[(header[4] << 8 | header[5]) - 1];
+    await stream.ReadExactlyAsync(body, deadline.Token);
+    Check(body.SequenceEqual(new byte[] { 0x86, 1 }), "learner-facing Night Scanner gateway rejects FC06 with 86 01");
+    Check((await ModbusClient.ReadAsync(gatewayPort, 5, 3, 100, 1, CancellationToken.None)).Values[0] == 650, "register 100 still reads 650 after the rejected write");
+
+    var scanLog = await client.GetFromJsonAsync<JsonElement>("/api/incident/night-scanner/log");
+    var scanEntries = scanLog.GetProperty("entries").EnumerateArray().ToArray();
+    Check(scanLog.GetProperty("simulated").GetBoolean() && scanLog.GetProperty("capture_note").GetString()!.Contains("no reply within 100 ms"), "Night Scanner log is labeled simulated and states the timeout");
+    Check(scanEntries.Length == 15 && scanEntries.All(e => e.TryGetProperty("exception_code", out _)), "Night Scanner log has 15 entries with exception_code");
+    Check(scanEntries.Count(e => e.GetProperty("status").GetString() == "timeout") == 8 && scanEntries.Count(e => e.GetProperty("status").GetString() == "exception") == 1, "Night Scanner log statuses");
+    foreach (var entry in scanEntries)
+    {
+        var frames = entry.GetProperty("frames");
+        Check(ModbusCodec.TryParse(Convert.FromHexString(frames[0].GetProperty("hex").GetString()!.Replace(" ", "")), FrameDirection.Request, out var rq, out _)
+            && rq!.Header.UnitId == entry.GetProperty("unit_id").GetInt32() && rq.Address == entry.GetProperty("address").GetInt32() && rq.Header.TransactionId == entry.GetProperty("transaction_id").GetInt32(), $"scan log entry {entry.GetProperty("sequence").GetInt32()} request re-decodes");
+        Check(frames.GetArrayLength() == (entry.GetProperty("status").GetString() == "timeout" ? 1 : 2), $"scan log entry {entry.GetProperty("sequence").GetInt32()} frame count matches status");
+    }
+    await using (var first = new TrainingService())
+    await using (var second = new TrainingService())
+        Check(JsonSerializer.Serialize(first.IncidentLog("night-scanner")) == JsonSerializer.Serialize(second.IncidentLog("night-scanner")), "Night Scanner log is identical across independent starts");
+
+    HttpContent ScanJson(int tx, string label) => JsonContent.Create(new { scenario_id = "night-scanner", transaction_id = tx, client = label });
+    var scanCorrect = await Answer(ScanJson(301, "ENG-WS-13"));
+    Check(scanCorrect.Status == HttpStatusCode.OK && scanCorrect.Body.GetProperty("verified").GetBoolean() && scanCorrect.Body.GetProperty("mitigations").GetArrayLength() == 4, "Night Scanner correct answer verifies with four mitigations");
+    var scanText = string.Join(" ", scanCorrect.Body.GetProperty("observations").EnumerateArray().Select(o => o.GetString()));
+    foreach (var needle in new[] { "ENG-WS-13", "10 requests", "unit IDs 1 to 10 in increasing order", "transaction 301", "transaction 310", "1 s shortest", "8 timeout(s)", "unit 5: exception 02", "from unit 9", "HMI-01 sent 5 request(s)" })
+        Check(scanText.Contains(needle), $"Night Scanner verified observations cite '{needle}': {scanText}");
+    var scanMitigations = string.Join(" ", scanCorrect.Body.GetProperty("mitigations").EnumerateArray().Select(m => m.GetString()));
+    Check(scanCorrect.Body.GetProperty("mitigations").EnumerateArray().All(m => m.GetString()!.StartsWith("Real-world guidance, not verified by this simulation")), "Night Scanner mitigations are labeled guidance");
+    foreach (var needle in new[] { "asset inventory", "IDS rules", "port 502", "logging at the gateway" }) Check(scanMitigations.Contains(needle), $"Night Scanner mitigations cover {needle}");
+    Check((await Answer(ScanJson(301, "eng-ws-13"))).Body.GetProperty("verified").GetBoolean(), "Night Scanner client label is case-insensitive");
+    foreach (var (tx, label, name, mustNotReveal) in new[] { (302, "ENG-WS-13", "second scan request", false), (301, "HMI-01", "first scan request, wrong client", true), (1, "HMI-01", "HMI poll", true), (4242, "X", "missing transaction", true) })
+    {
+        var wrongScan = await Answer(ScanJson(tx, label));
+        Check(wrongScan.Status == HttpStatusCode.OK && !wrongScan.Body.GetProperty("verified").GetBoolean() && wrongScan.Body.GetProperty("mitigations").GetArrayLength() == 0, $"Night Scanner {name} is not verified and has no mitigations");
+        if (mustNotReveal) Check(!wrongScan.Body.GetRawText().Contains("ENG-WS-13"), $"Night Scanner {name} does not reveal the scanner label");
+        Check(!string.Join(" ", wrongScan.Body.GetProperty("observations").EnumerateArray().Select(o => o.GetString())).Contains("transaction 301") || tx == 301, $"Night Scanner {name} does not name the first transaction");
+    }
+    Check((await Answer(ScanJson(301, "HMI-01"))).Body.GetProperty("log_entry").GetProperty("client").GetString() == "(not shown until the answer is verified)", "Night Scanner answer entry label is redacted when unverified");
+}
 foreach (var (body, name) in new[]
 {
     ("{\"scenario_id\":\"phantom-writer\",\"transaction_id\":1111,\"client\":\"MAINT-LAPTOP-07\",\"host\":\"example.com\"}", "extra field"),

@@ -94,12 +94,13 @@
         <section id="incident-panel" class="panel incident" aria-labelledby="log-title" hidden>
           <div class="section-heading"><div><p class="eyebrow">02B / INVESTIGATE THE CAPTURE</p><h2 id="log-title">Simulated traffic log</h2></div></div>
           <p id="log-note" class="notice"></p>
-          <p class="muted">FC03 reads holding registers. FC06 (Write Single Register) changes one holding register. Find the entry that changed the setpoint, then type its transaction ID and client label into the answer form below.</p>
+          <p class="muted">FC03 (Read Holding Registers) reads holding registers. FC06 (Write Single Register) changes one holding register. The unit ID is the device address a gateway routes the request to. Status shows what came back: a response, an exception code, or a timeout (no reply).</p>
+          <p id="incident-task" class="muted"></p>
           <p class="muted scroll-note">Scroll the table sideways to see every column.</p>
           <div class="table-scroll" role="region" aria-labelledby="log-caption" tabindex="0">
             <table id="log-table" class="log-table">
               <caption id="log-caption">Simulated capture, one row per Modbus transaction (times in UTC)</caption>
-              <thead><tr><th scope="col">Seq</th><th scope="col">Simulated time</th><th scope="col">Client label</th><th scope="col">Transaction ID</th><th scope="col">Unit ID</th><th scope="col">Function</th><th scope="col">Address</th><th scope="col">Value(s)</th><th scope="col">Frames</th></tr></thead>
+              <thead><tr><th scope="col">Seq</th><th scope="col">Simulated time</th><th scope="col">Client label</th><th scope="col">Transaction ID</th><th scope="col">Unit ID</th><th scope="col">Function</th><th scope="col">Status</th><th scope="col">Address</th><th scope="col">Value(s)</th><th scope="col">Frames</th></tr></thead>
               <tbody id="log-body"></tbody>
             </table>
           </div>

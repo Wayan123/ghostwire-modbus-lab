@@ -13,8 +13,8 @@ public sealed class ModbusSimulator : IAsyncDisposable
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource stopping = new();
     private readonly SemaphoreSlim slots = new(32);
-    private readonly int unit;
-    private readonly Dictionary<int, Dictionary<int, ushort>> registers;
+    // unit ID -> function (3 or 4) -> register offset -> value. Unit IDs with no device stay silent.
+    private readonly Dictionary<int, Dictionary<int, Dictionary<int, ushort>>> devices;
     private readonly bool allowWrites;
     private readonly IExchangeRecorder? recorder;
     private readonly object registerLock = new();
@@ -24,9 +24,12 @@ public sealed class ModbusSimulator : IAsyncDisposable
     // allowWrites is true only for the private Phantom Writer simulator used by IncidentLogGenerator at startup.
     // Every learner-reachable simulator keeps the default and answers FC06 with exception 01.
     public ModbusSimulator(int unit, Dictionary<int, Dictionary<int, ushort>> registers, bool allowWrites = false, IExchangeRecorder? recorder = null)
+        : this(new Dictionary<int, Dictionary<int, Dictionary<int, ushort>>> { [unit] = registers }, allowWrites, recorder) { }
+
+    // Gateway form: several unit IDs behind one loopback port (used by The Night Scanner).
+    public ModbusSimulator(Dictionary<int, Dictionary<int, Dictionary<int, ushort>>> devices, bool allowWrites = false, IExchangeRecorder? recorder = null)
     {
-        this.unit = unit;
-        this.registers = registers;
+        this.devices = devices;
         this.allowWrites = allowWrites;
         this.recorder = recorder;
         listener.Start();
@@ -66,7 +69,7 @@ public sealed class ModbusSimulator : IAsyncDisposable
                 await stream.ReadExactlyAsync(pdu, deadline.Token);
                 var received = header.Concat(pdu).ToArray();
                 int remotePort = client.Client.RemoteEndPoint is IPEndPoint remote ? remote.Port : 0;
-                if (header[6] != unit) { Record(remotePort, received, null); await Task.Delay(600, deadline.Token); return; }
+                if (!devices.TryGetValue(header[6], out var registers)) { Record(remotePort, received, null); await Task.Delay(600, deadline.Token); return; }
                 int function = pdu[0];
                 byte[] reply;
                 if (function == 6 && allowWrites)

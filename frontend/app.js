@@ -367,6 +367,7 @@ async function showIncident(scenario) {
   const attempts = answerHistory.get(scenario.id) || [];
   if (attempts.length) renderAnswer(attempts[attempts.length - 1]);
   renderAnswerHints(scenario.id);
+  $('incident-task').textContent = text(scenario.incident?.task, '');
   if (incidentLogs.has(scenario.id)) { renderLog(scenario.id); return; }
   $('log-body').replaceChildren();
   $('log-note').textContent = 'Loading the simulated capture…';
@@ -379,21 +380,39 @@ async function showIncident(scenario) {
   }
 }
 
+function flagLabel(scenarioId) {
+  return text(scenarios.find((item) => item.id === scenarioId)?.incident?.flag, '⚠ Answer verified');
+}
+
+// Status as text from the captured entry; the exception name comes from the server-decoded response frame.
+function statusLabel(entry) {
+  if (entry.status === 'response') return 'Response';
+  if (entry.status === 'timeout') return 'Timeout (no reply)';
+  if (entry.status === 'exception') {
+    const response = (Array.isArray(entry.frames) ? entry.frames : []).find((frame) => frame.direction === 'response');
+    const field = (response?.fields || []).find((item) => item.name === 'Exception code');
+    return `Exception ${text(field?.value ?? entry.exception_code)}`;
+  }
+  return text(entry.status, 'Unknown');
+}
+
 function renderLog(scenarioId) {
   const log = incidentLogs.get(scenarioId);
   const body = $('log-body');
   body.replaceChildren();
   $('log-note').textContent = `Simulated capture. ${text(log.capture_note, '')}`;
   const flagged = verifiedTransaction.get(scenarioId);
+  const flag = flagLabel(scenarioId);
   for (const entry of Array.isArray(log.entries) ? log.entries : []) {
     const row = document.createElement('tr');
+    row.dataset.status = text(entry.status, '');
     const seq = addText(row, 'td', text(entry.sequence));
     if (flagged !== undefined && entry.transaction_id === flagged) {
       row.dataset.flag = 'unauthorized';
       row.tabIndex = 0;
-      row.setAttribute('aria-label', `Sequence ${text(entry.sequence)}: unauthorized write, verified by your answer`);
+      row.setAttribute('aria-label', `Sequence ${text(entry.sequence)}: ${flag.replace(/^⚠\s*/, '')}, verified by your answer`);
       seq.append(document.createElement('br'));
-      addText(seq, 'strong', '⚠ Unauthorized write', 'flag');
+      addText(seq, 'strong', flag, 'flag');
     }
     const timeCell = document.createElement('td');
     const iso = text(entry.time);
@@ -413,15 +432,16 @@ function renderLog(scenarioId) {
     addText(row, 'td', text(entry.transaction_id));
     addText(row, 'td', text(entry.unit_id));
     addText(row, 'td', `${String(entry.function_code).padStart(2, '0')} · ${text(entry.function_name)}`, 'wrap');
+    addText(row, 'td', statusLabel(entry), 'wrap');
     addText(row, 'td', text(entry.address));
-    addText(row, 'td', text(entry.values));
+    addText(row, 'td', text(entry.values, 'None'));
     // Frames open in a full-width row below the entry instead of inside a narrow cell.
     const framesRow = document.createElement('tr');
     framesRow.className = 'frames-row';
     framesRow.id = `log-frames-${text(entry.sequence)}`;
     framesRow.hidden = true;
     const framesCell = document.createElement('td');
-    framesCell.colSpan = 9;
+    framesCell.colSpan = 10;
     framesRow.append(framesCell);
     const toggleCell = document.createElement('td');
     const toggle = document.createElement('button');
@@ -454,19 +474,22 @@ function renderLog(scenarioId) {
 
 // Progressive training hints, kept client-side: none for the first 2 unverified answers,
 // hint 1 from the 3rd, hint 2 from the 4th. Hidden once an answer is verified. They never name the row.
-const answerHints = [
-  'Look at the Function column: which entry changes data instead of reading it?',
-  'Compare the value read before and after each entry.',
-];
+// The hint text is case-specific and comes from the scenario's `incident` field.
 const hintThreshold = 3;
 
+function answerHints(scenarioId) {
+  const hints = scenarios.find((item) => item.id === scenarioId)?.incident?.hints;
+  return Array.isArray(hints) ? hints : [];
+}
+
 function renderAnswerHints(scenarioId) {
+  const hints = answerHints(scenarioId);
   const attempts = answerHistory.get(scenarioId) || [];
   const wrong = attempts.filter((entry) => entry.verified !== true).length;
-  const shown = attempts.some((entry) => entry.verified === true) ? 0 : Math.max(0, Math.min(answerHints.length, wrong - hintThreshold + 1));
+  const shown = attempts.some((entry) => entry.verified === true) ? 0 : Math.max(0, Math.min(hints.length, wrong - hintThreshold + 1));
   const list = $('answer-hint-list');
   list.replaceChildren();
-  answerHints.slice(0, shown).forEach((hint, index) => addText(list, 'li', `Training hint ${index + 1}: ${hint}`));
+  hints.slice(0, shown).forEach((hint, index) => addText(list, 'li', `Training hint ${index + 1}: ${hint}`));
   $('answer-hints').hidden = shown === 0;
   return shown;
 }
@@ -480,7 +503,7 @@ function renderAnswer(result) {
   const mitigations = Array.isArray(result.mitigations) ? result.mitigations : [];
   $('mitigations-section').hidden = mitigations.length === 0;
   fillList($('answer-mitigations'), mitigations);
-  $('answer-verified').textContent = ok ? 'Verified by the simulated capture: this transaction ID and client label match the write.' : 'Not verified by the simulated capture.';
+  $('answer-verified').textContent = ok ? 'Verified by the simulated capture: this transaction ID and client label match the evidence for this case.' : 'Not verified by the simulated capture.';
   $('answer-verified').parentElement.dataset.state = ok ? 'success' : '';
   $('answer-explanation').textContent = text(result.explanation, 'No explanation returned.');
   $('answer-explanation-source').textContent = sourceText(result.explanation_source);
@@ -543,8 +566,8 @@ $('answer-form').addEventListener('submit', async (event) => {
     renderAnswerHistory();
     const hintsAfter = renderAnswerHints(scenario.id);
     $('test-message').textContent = result.verified === true
-      ? 'Answer verified by the simulated capture. The matching log row is now marked "Unauthorized write".'
-      : `Answer not verified by the simulated capture. Review the log and try again.${hintsAfter > hintsBefore ? ` Training hint ${hintsAfter}: ${answerHints[hintsAfter - 1]}` : ''}`;
+      ? `Answer verified by the simulated capture. The matching log row is now marked "${flagLabel(scenario.id).replace(/^⚠\s*/, '')}".`
+      : `Answer not verified by the simulated capture. Review the log and try again.${hintsAfter > hintsBefore ? ` Training hint ${hintsAfter}: ${answerHints(scenario.id)[hintsAfter - 1]}` : ''}`;
   } catch (error) {
     $('test-message').textContent = `Answer failed: ${error.message}`;
     $('test-message').dataset.state = 'error';

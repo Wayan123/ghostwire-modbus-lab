@@ -17,10 +17,17 @@ public sealed class TrainingService : IAsyncDisposable
         new("unit-id", "The Silent Sensor", "A read times out despite a running simulated gateway.", new(1,4,0,1,1), new[] { "Simulated gateway routes this device at unit 17.", "The simulated device publishes its value at input register offset 0.", "In this simulation only, a unit mismatch is silently ignored." }, 17,4,0,73,null, "troubleshooting", "beginner", null),
         new("register-addressing", "The Wrong Register", "The device responds with an illegal data address exception.", new(3,4,21,1,1), new[] { "Simulated device: unit 3, input register offset 20.", "This exercise uses zero-based protocol offsets, not one-based register labels." }, 3,4,20,125,null, "troubleshooting", "intermediate", null),
         // The phantom-writer simulator is seeded from the captured final value, not from `value` (the documented normal setpoint).
-        new(IncidentScript.ScenarioId, "Phantom Writer", "A simulated boiler setpoint changed without an approved work order.", new(5,3,100,1,0.1), new[] { "Simulated boiler controller: unit 5, holding register offset 100 is the temperature setpoint.", "The setpoint register uses 0.1 °C per count. The documented normal value is 650 (65.0 °C).", "A simulated traffic capture from the controller's network segment is available for this case." }, 5,3,100,IncidentScript.InitialSetpoint,0.1, "security", "intermediate", "°C")
+        new(IncidentScript.ScenarioId, "Phantom Writer", "A simulated boiler setpoint changed without an approved work order.", new(5,3,100,1,0.1), new[] { "Simulated boiler controller: unit 5, holding register offset 100 is the temperature setpoint.", "The setpoint register uses 0.1 °C per count. The documented normal value is 650 (65.0 °C).", "A simulated traffic capture from the controller's network segment is available for this case." }, 5,3,100,IncidentScript.InitialSetpoint,0.1, "security", "intermediate", "°C"),
+        new(NightScannerScript.ScenarioId, "The Night Scanner", "The boiler reads normally, but the simulated gateway saw unusual traffic overnight.", new(5,3,100,1,0.1), new[] { "Simulated plant gateway: it routes the boiler controller at unit 5. Holding register offset 100 is the temperature setpoint.", "The setpoint register uses 0.1 °C per count. The documented normal value is 650 (65.0 °C).", "The documented polling client is HMI-01, which reads unit 5 every 5 seconds. No other device is documented behind this gateway.", "In this simulation, the gateway stays silent (timeout) for a unit ID with no device, and a device returns exception 02 for an address it does not have.", "A simulated traffic capture from the gateway's network segment is available for this case." }, 5,3,100,NightScannerScript.Setpoint,0.1, "security", "intermediate", "°C")
+    };
+    // Case-specific text for the incident panel: task above the log, progressive hints after unverified answers, row flag after a verified answer.
+    private static readonly Dictionary<string, object> IncidentUi = new()
+    {
+        [IncidentScript.ScenarioId] = new { task = "Find the entry that changed the setpoint, then type its transaction ID and client label into the answer form below.", hints = new[] { "Look at the Function column: which entry changes data instead of reading it?", "Compare the value read before and after each entry." }, flag = "⚠ Unauthorized write" },
+        [NightScannerScript.ScenarioId] = new { task = "Find the client that queried many different unit IDs, then type the transaction ID of its first request and its client label into the answer form below.", hints = new[] { "Look at the Unit ID column: does any client ask many different units?", "Find the first request in that run." }, flag = "⚠ First scan request" },
     };
     private readonly Dictionary<string, ModbusSimulator> simulators = new();
-    private readonly TrafficLog incidentLog;
+    private readonly Dictionary<string, TrafficLog> incidentLogs = new();
     public static IReadOnlyList<Scenario> All => Cases;
     private static readonly HttpClient Provider = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
 
@@ -32,14 +39,17 @@ public sealed class TrainingService : IAsyncDisposable
                 simulators.Add(item.id, new ModbusSimulator(item.unit, new() { [item.function] = new() { [item.address] = item.value } }));
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var (log, finalSetpoint) = IncidentLogGenerator.GenerateAsync(deadline.Token).GetAwaiter().GetResult();
-            incidentLog = log;
+            incidentLogs.Add(IncidentScript.ScenarioId, log);
             // Learner-facing and read-only: FC06 sent here returns exception 01.
             simulators.Add(IncidentScript.ScenarioId, new ModbusSimulator(IncidentScript.Unit, new() { [3] = new() { [IncidentScript.Register] = finalSetpoint } }));
+            incidentLogs.Add(NightScannerScript.ScenarioId, IncidentLogGenerator.GenerateNightScannerAsync(NightScannerPlan.Default, deadline.Token).GetAwaiter().GetResult());
+            // Learner-facing, read-only gateway with the same device map as the capture.
+            simulators.Add(NightScannerScript.ScenarioId, new ModbusSimulator(NightScannerScript.Devices(NightScannerPlan.Default)));
         }
         catch (Exception ex)
         {
             foreach (var sim in simulators.Values) sim.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            if (ex is OperationCanceledException) throw new InvalidOperationException("Phantom Writer traffic log generation exceeded its 5 s startup deadline", ex);
+            if (ex is OperationCanceledException) throw new InvalidOperationException("Incident traffic log generation exceeded its 5 s startup deadline", ex);
             throw;
         }
     }
@@ -47,7 +57,7 @@ public sealed class TrainingService : IAsyncDisposable
     // For the harness only: the port of a learner-facing, read-only simulator. Never exposed over HTTP.
     public int SimulatorPort(string scenarioId) => simulators[scenarioId].Port;
 
-    public object Scenarios() => new { scenarios = Cases.Select(c => new { c.id, c.title, c.summary, c.initial, c.documentation, c.category, c.difficulty }).ToArray() };
+    public object Scenarios() => new { scenarios = Cases.Select(c => new { c.id, c.title, c.summary, c.initial, c.documentation, c.category, c.difficulty, incident = IncidentUi.GetValueOrDefault(c.id) }).ToArray() };
 
     public static TestRequest Validate(JsonElement payload)
     {
@@ -149,10 +159,19 @@ public sealed class TrainingService : IAsyncDisposable
         "Real-world guidance, not verified by this simulation: log setpoint changes with source and time, and review them against change records."
     };
 
+    public static readonly string[] ScanMitigations = {
+        "Real-world guidance, not verified by this simulation: keep an asset inventory and a baseline of which clients poll which unit IDs, so a new client or a newly answering unit stands out.",
+        "Real-world guidance, not verified by this simulation: add IDS rules that alert when one source sends Modbus requests to many different unit IDs in a short time.",
+        "Real-world guidance, not verified by this simulation: restrict which hosts can reach TCP port 502 on gateways and controllers, for example with an allow-list on an industrial firewall.",
+        "Real-world guidance, not verified by this simulation: enable logging at the gateway (source, unit ID, function code, result) and review it."
+    };
+
+    private static string[] MitigationsFor(string scenarioId) => scenarioId == NightScannerScript.ScenarioId ? ScanMitigations : Mitigations;
+
     private static bool IsSecurityCase(string? id) => id != null && Cases.Any(c => c.category == "security" && c.id == id);
 
-    // scenario_id is matched against the fixed list of security cases; it never builds a path, host or URL.
-    public TrafficLog? IncidentLog(string scenarioId) => scenarioId == IncidentScript.ScenarioId ? incidentLog : null;
+    // scenario_id is matched against the fixed keys of the generated logs; it never builds a path, host or URL.
+    public TrafficLog? IncidentLog(string scenarioId) => incidentLogs.GetValueOrDefault(scenarioId);
 
     public static AnswerRequest ValidateAnswer(JsonElement payload)
     {
@@ -174,15 +193,16 @@ public sealed class TrainingService : IAsyncDisposable
 
     public async Task<Dictionary<string, object?>> AnswerAsync(AnswerRequest answer, CancellationToken ct)
     {
+        var incidentLog = incidentLogs[answer.scenario_id];
         var diagnosis = Diagnosis.ForAnswer(incidentLog, answer);
         var entry = incidentLog.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
-        // An unverified answer must not reveal the writer's label, so the matched write entry is redacted.
-        if (entry != null && !diagnosis.Verified && entry.function_code == 6) entry = entry with { client = "(not shown until the answer is verified)" };
+        // An unverified answer must not reveal the answer entry's label, so that entry is redacted.
+        if (entry != null && !diagnosis.Verified && entry == Diagnosis.AnswerEntry(incidentLog)) entry = entry with { client = "(not shown until the answer is verified)" };
         var result = new Dictionary<string, object?>
         {
             ["status"] = "answered", ["verified"] = diagnosis.Verified, ["answer"] = answer,
             ["observations"] = diagnosis.Observations, ["possible_causes"] = diagnosis.PossibleCauses, ["training_hints"] = diagnosis.TrainingHints,
-            ["next_steps"] = diagnosis.NextSteps, ["mitigations"] = diagnosis.Verified ? Mitigations : Array.Empty<string>(), ["log_entry"] = entry
+            ["next_steps"] = diagnosis.NextSteps, ["mitigations"] = diagnosis.Verified ? MitigationsFor(answer.scenario_id) : Array.Empty<string>(), ["log_entry"] = entry
         };
         var (explanation, source) = await ExplainAsync(result, diagnosis.Observations, diagnosis.NextSteps, ct);
         result["explanation"] = explanation; result["explanation_source"] = source;
@@ -226,14 +246,72 @@ public static class Diagnosis
             causes = new[] { "The simulator or local connection may be unavailable." };
             steps = new[] { "Restart the local application and retry." };
         }
-        var hints = scenario.category == "security"
+        var hints = scenario.id == NightScannerScript.ScenarioId
+            ? new[] { "Training hint: " + scenario.documentation[0], "Training hint: a verified read confirms that unit 5 answers normally in this simulation, not which other clients queried the gateway. Open the simulated traffic log." }
+            : scenario.category == "security"
             ? new[] { "Training hint: " + scenario.documentation[0], "Training hint: a verified read confirms the current simulated setpoint, not who changed it. Open the simulated traffic log." }
             : new[] { "Training hint: " + scenario.documentation[0] };
         return new(observations, causes, hints, steps, verified);
     }
 
+    // The correct answer entry, derived from the captured log only. Phantom Writer: the single FC06 entry.
+    // Night Scanner: the first entry of the only client label that addresses at least 3 distinct unit IDs.
+    public static TrafficLogEntry? AnswerEntry(TrafficLog log)
+    {
+        if (log.scenario_id == NightScannerScript.ScenarioId)
+        {
+            var scanners = log.entries.GroupBy(e => e.client).Where(g => g.Select(e => e.unit_id).Distinct().Count() >= 3).ToArray();
+            return scanners.Length == 1 ? scanners[0].OrderBy(e => e.sequence).First() : null;
+        }
+        var writes = log.entries.Where(e => e.function_code == 6).ToArray();
+        return writes.Length == 1 ? writes[0] : null;
+    }
+
+    private static string StatusText(TrafficLogEntry e) => e.status == "exception" ? $"exception {e.exception_code:D2} ({ModbusCodec.ExceptionName(e.exception_code ?? 0)})" : e.status;
+
+    private static DiagnosisResult ForScanAnswer(TrafficLog log, AnswerRequest answer)
+    {
+        var entry = log.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
+        var first = AnswerEntry(log);
+        var mismatch = new[] { "The submitted pair does not match the first request of a scan in this capture." };
+        var retry = new[] { "Compare the unit ID and client label columns of the simulated traffic log, then submit a transaction ID and client label." };
+        string Describe(TrafficLogEntry e) => $"FC{e.function_code:D2} · {e.function_name} to unit {e.unit_id} at address {e.address}";
+        if (entry == null)
+            return new(new() { $"No transaction {answer.transaction_id} appears in this simulated capture." }, mismatch, Array.Empty<string>(), retry, false);
+        bool clientMatches = string.Equals(entry.client, answer.client.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (entry != first)
+            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} from {entry.client} is {Describe(entry)}, status {StatusText(entry)}." }, mismatch, Array.Empty<string>(), retry, false);
+        if (!clientMatches)
+            return new(new() { $"In this simulated capture, transaction {entry.transaction_id} is {Describe(entry)}.", "The submitted client label differs from the capture's label for this transaction." },
+                new[] { "The submitted client label does not match the capture metadata for this transaction." }, Array.Empty<string>(),
+                new[] { "Re-read the client label column for this transaction in the simulated traffic log." }, false);
+
+        // Verified: every value below is computed from captured log entries, not from plan constants.
+        var run = log.entries.Where(e => e.client == entry.client).OrderBy(e => e.sequence).ToArray();
+        var times = run.Select(e => DateTimeOffset.Parse(e.time, CultureInfo.InvariantCulture)).ToArray();
+        var gaps = times.Zip(times.Skip(1), (a, b) => (b - a).TotalSeconds).ToArray();
+        int timeouts = run.Count(e => e.status == "timeout");
+        var exceptions = run.Where(e => e.status == "exception").ToArray();
+        var responses = run.Where(e => e.status == "response").ToArray();
+        bool increasing = run.Zip(run.Skip(1), (a, b) => b.unit_id > a.unit_id).All(x => x);
+        var observations = new List<string>
+        {
+            $"In this simulated capture, client label {entry.client} sent {run.Length} requests to unit IDs {run[0].unit_id} to {run[^1].unit_id}" + (increasing ? " in increasing order" : "") + $", using function(s) {string.Join(", ", run.Select(e => $"FC{e.function_code:D2}").Distinct())} at address(es) {string.Join(", ", run.Select(e => e.address).Distinct())}.",
+            $"The run starts at transaction {run[0].transaction_id} ({run[0].time}) and ends at transaction {run[^1].transaction_id} ({run[^1].time}).",
+            gaps.Length > 0 ? $"Intervals between consecutive requests from {entry.client}: {gaps.Min().ToString(CultureInfo.InvariantCulture)} s shortest, {gaps.Max().ToString(CultureInfo.InvariantCulture)} s longest." : "There is only one request from this client.",
+            $"Results of these requests: {timeouts} timeout(s), {exceptions.Length} exception(s)" + (exceptions.Length > 0 ? $" ({string.Join(", ", exceptions.Select(e => $"unit {e.unit_id}: {StatusText(e)}"))})" : "") + $", {responses.Length} response(s)" + (responses.Length > 0 ? $" (from unit {string.Join(", ", responses.Select(e => e.unit_id))})." : "."),
+        };
+        foreach (var other in log.entries.Where(e => e.client != entry.client).GroupBy(e => e.client))
+            observations.Add($"Client label {other.Key} sent {other.Count()} request(s) in this simulated capture, to unit ID(s) {string.Join(", ", other.Select(e => e.unit_id).Distinct())} only.");
+        return new(observations, Array.Empty<string>(),
+            new[] { "Training hint: in this simulation, a run of reads to increasing unit IDs from one client, mostly unanswered, is a reconnaissance pattern, not normal polling." },
+            new[] { responses.Length > 0 ? $"Compare unit {string.Join(", ", responses.Select(e => e.unit_id))}, which answered, with the simulated device documentation, which lists only unit 5." : "Compare the scanned unit IDs with the simulated device documentation.",
+                    $"Check whether {entry.client} had an approved reason to query these unit IDs." }, true);
+    }
+
     public static DiagnosisResult ForAnswer(TrafficLog log, AnswerRequest answer)
     {
+        if (log.scenario_id == NightScannerScript.ScenarioId) return ForScanAnswer(log, answer);
         var entry = log.entries.FirstOrDefault(e => e.transaction_id == answer.transaction_id);
         var mismatch = new[] { "The submitted pair does not match a write in this capture." };
         var retry = new[] { "Compare the function code of each entry in the simulated traffic log, then submit a transaction ID and client label." };
