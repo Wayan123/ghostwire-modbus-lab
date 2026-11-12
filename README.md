@@ -4,6 +4,10 @@ GhostWire teaches technicians and students to investigate Modbus TCP faults and 
 
 Everything is simulated. GhostWire never connects to physical equipment or scans networks, and learners cannot send Modbus writes.
 
+**User and technical manual (PDF):** [English](docs/manual/ghostwire-manual-en.pdf) · [Bahasa Indonesia](docs/manual/ghostwire-manual-id.pdf). Markdown versions: [EN](docs/manual/ghostwire-manual-en.md) · [ID](docs/manual/ghostwire-manual-id.md).
+
+![GhostWire home: guided tour and case picker](docs/manual/img/gw-01-home.png)
+
 ## Try it in 2 minutes
 
 No physical hardware, AI key or third-party NuGet package is needed.
@@ -19,6 +23,27 @@ dotnet run --project csharp/GhostWire/GhostWire.csproj
 Open <http://127.0.0.1:8000> and stop the server with Ctrl+C.
 
 The full walkthrough is in [docs/judge-quick-start.md](docs/judge-quick-start.md).
+
+## How to use it
+
+Every case follows the same loop. The manual walks through all five cases with 15 figures.
+
+1. **Choose your case** in **Training scenario**, then open **Inspect simulated device documentation**. The documentation is the ground truth.
+2. Press **Run simulated read** with the initial settings and read the evidence: status, raw registers, observations, possible causes and hints.
+3. Change **one** setting to match the documentation and run the read again. A case is solved only when the **Verification** line says verified, which needs both correct settings and a real simulator response.
+4. Open **Wire evidence (simulated frames)** to see every byte of the request and response, with each MBAP and PDU field decoded.
+
+| Wrong scale: raw 39 shown as 39 bar | Fixed: scale 0.01 → 0.39 bar, verified |
+|---|---|
+| ![Giant Pressure, first read](docs/manual/img/gw-03-pressure-wrong.png) | ![Giant Pressure, verified](docs/manual/img/gw-04-pressure-verified.png) |
+
+![Wire evidence: request 00 01 00 00 00 06 07 03 00 0A 00 01 and response 00 01 00 00 00 05 07 03 02 00 27, field by field](docs/manual/img/gw-05-wire-evidence.png)
+
+**Security cases.** In Phantom Writer and The Night Scanner, the process value alone does not tell you what happened. Scroll to **02B / Investigate the capture**, study the **Simulated traffic log** (**Show frames** displays each row's bytes), and submit the **Transaction ID** and **Client label** of the entry you found. A wrong answer says only "not verified", and hints appear after 3 and 4 misses. A verified answer marks the row and lists real-world mitigations.
+
+![Phantom Writer: the 12-row traffic log and the answer form](docs/manual/img/gw-10-phantom-log.png)
+
+**Review.** **03 / Retest** compares your last two reads, and **04 / Review** keeps every read and answer of the session. **Print case report** prints it or saves it as a PDF.
 
 ## The five cases
 
