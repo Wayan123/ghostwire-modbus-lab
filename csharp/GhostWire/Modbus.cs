@@ -110,6 +110,18 @@ public sealed class ModbusSimulator : IAsyncDisposable
                 await stream.WriteAsync(header, deadline.Token);
                 await stream.WriteAsync(reply, deadline.Token);
                 Record(remotePort, received, header.Concat(reply).ToArray());
+                // One request per connection. Close gracefully: unread pipelined bytes would make Dispose send a RST and the client could lose the reply.
+                client.Client.Shutdown(SocketShutdown.Send);
+                using var drain = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
+                drain.CancelAfter(TimeSpan.FromMilliseconds(200));
+                var sink = new byte[260];
+                int drained = 0;
+                while (drained < sink.Length)
+                {
+                    int n = await stream.ReadAsync(sink.AsMemory(0, sink.Length - drained), drain.Token);
+                    if (n == 0) break;
+                    drained += n;
+                }
             }
         }
         catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException) { }

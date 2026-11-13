@@ -60,6 +60,11 @@ namespace GhostWire
                 }
                 context.Response.Headers.XContentTypeOptions = "nosniff";
                 if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
+                else
+                {
+                    context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+                    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+                }
                 await next();
             });
             app.UseRateLimiter();

@@ -52,6 +52,27 @@ await using (var simulator = new ModbusSimulator(7, new Dictionary<int, Dictiona
     bool refused = false;
     try { await ModbusClient.ReadAsync(simulator.Port, 7, 6, 10, 1, CancellationToken.None); } catch (ArgumentOutOfRangeException) { refused = true; }
     Check(refused, "client refuses function 6");
+    // Two coalesced requests in one segment: the first reply must arrive complete, never lost to a RST on close.
+    int pipelineComplete = 0;
+    for (int run = 0; run < 20; run++)
+    {
+        try
+        {
+            using var tcp = new TcpClient();
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await tcp.ConnectAsync(IPAddress.Loopback, simulator.Port, deadline.Token);
+            using var stream = tcp.GetStream();
+            byte[] one = { 0,1,0,0,0,6,7,3,0,10,0,1 };
+            byte[] two = { 0,2,0,0,0,6,7,3,0,10,0,1 };
+            await stream.WriteAsync(one.Concat(two).ToArray(), deadline.Token);
+            byte[] reply = new byte[11];
+            await stream.ReadExactlyAsync(reply, deadline.Token);
+            if (ModbusCodec.Hex(reply) == "00 01 00 00 00 05 07 03 02 00 27") pipelineComplete++;
+        }
+        catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or EndOfStreamException) { }
+    }
+    Console.WriteLine($"Pipelined first reply complete: {pipelineComplete}/20");
+    Check(pipelineComplete == 20, "coalesced requests still receive the first reply complete in 20 of 20 runs");
 }
 
 // A loopback fake server replies with transaction ID 2 instead of 1. The client must stop after the header
@@ -399,6 +420,11 @@ foreach (var (id, category, difficulty) in new[] { ("pressure-scaling", "trouble
     Check(writerUi.GetProperty("hints")[0].GetString() == "Look at the Function column: which entry changes data instead of reading it?" && writerUi.GetProperty("flag").GetString() == "⚠ Unauthorized write", "Phantom Writer hints unchanged");
 }
 Check((await client.GetAsync("/")).StatusCode == HttpStatusCode.OK, "frontend served");
+using (var rootResponse = await client.GetAsync("/"))
+{
+    Check(rootResponse.Headers.TryGetValues("Content-Security-Policy", out var csp) && csp.Single() == "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", "/ carries the Content-Security-Policy");
+    Check(rootResponse.Headers.TryGetValues("Referrer-Policy", out var referrer) && referrer.Single() == "no-referrer", "/ carries Referrer-Policy no-referrer");
+}
 object P(string id, int unit, int fc, int addr, int qty, double scale) => new { scenario_id = id, unit_id = unit, function_code = fc, address = addr, quantity = qty, scale };
 var pressure = await Post(client, P("pressure-scaling",7,3,10,1,1));
 Check(pressure.GetProperty("raw_registers")[0].GetInt32() == 39 && !pressure.GetProperty("verified").GetBoolean(), "initial pressure");
