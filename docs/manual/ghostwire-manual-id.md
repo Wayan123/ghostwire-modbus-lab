@@ -1,7 +1,7 @@
 ---
 title: GhostWire
 subtitle: Manual Pengguna dan Teknis
-version: 1.1.0
+version: 1.1.1
 date: 13 November 2026
 repo: https://github.com/Wayan123/ghostwire-modbus-lab
 img: img
@@ -45,7 +45,7 @@ Semua tampilan di manual ini diambil dari GhostWire v1.1.0 yang berjalan di Wind
 
 ### 1.1 Windows tanpa instalasi (paling mudah)
 
-1. Unduh `GhostWire-Windows-v1.1.0-standalone.zip` dari <https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest>. Ukurannya sekitar 40 MB dan sudah berisi runtime .NET.
+1. Unduh `GhostWire-Windows-v1.1.1-standalone.zip` dari <https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest>. Ukurannya sekitar 40 MB dan sudah berisi runtime .NET.
 2. Ekstrak, lalu klik dua kali `GhostWire.exe`. Jendela konsol akan terbuka. **Biarkan tetap terbuka**, karena itulah servernya.
 3. Buka <http://127.0.0.1:8000> di browser.
 4. Windows SmartScreen dapat memperingatkan karena file belum ditandatangani. Pilih **More info → Run anyway**.

@@ -1,7 +1,7 @@
 ---
 title: GhostWire
 subtitle: User and Technical Manual
-version: 1.1.0
+version: 1.1.1
 date: 13 November 2026
 repo: https://github.com/Wayan123/ghostwire-modbus-lab
 img: img
@@ -45,7 +45,7 @@ Every screen in this manual was captured from GhostWire v1.1.0 running on Window
 
 ### 1.1 Windows, no install (easiest)
 
-1. Download `GhostWire-Windows-v1.1.0-standalone.zip` from <https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest>. It is about 40 MB and includes the .NET runtime.
+1. Download `GhostWire-Windows-v1.1.1-standalone.zip` from <https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest>. It is about 40 MB and includes the .NET runtime.
 2. Unzip it and double-click `GhostWire.exe`. A console window opens. **Keep it open**, because it is the server.
 3. Open <http://127.0.0.1:8000> in a browser.
 4. Windows SmartScreen may warn because the file is unsigned. Choose **More info → Run anyway**.

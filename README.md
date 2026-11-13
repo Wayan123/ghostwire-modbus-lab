@@ -12,7 +12,7 @@ Everything is simulated. GhostWire never connects to physical equipment or scans
 
 No physical hardware, AI key or third-party NuGet package is needed.
 
-**(a) Windows, no install (easiest).** Download `GhostWire-Windows-v1.1.0-standalone.zip` from the [latest release](https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest). It is about 40 MB and bundles the .NET runtime. Unzip it, double-click `GhostWire.exe`, keep the console open, and open <http://127.0.0.1:8000>. Windows SmartScreen may warn because the file is unsigned; choose *More info → Run anyway*. A smaller zip (about 130 KB) on the same page needs the [.NET 8 ASP.NET Core Runtime x64](https://dotnet.microsoft.com/download/dotnet/8.0).
+**(a) Windows, no install (easiest).** Download `GhostWire-Windows-v1.1.1-standalone.zip` from the [latest release](https://github.com/Wayan123/ghostwire-modbus-lab/releases/latest). It is about 40 MB and bundles the .NET runtime. Unzip it, double-click `GhostWire.exe`, keep the console open, and open <http://127.0.0.1:8000>. Windows SmartScreen may warn because the file is unsigned; choose *More info → Run anyway*. A smaller zip (about 130 KB) on the same page needs the [.NET 8 ASP.NET Core Runtime x64](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 **(b) From source.** Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), then from the repository root run:
 
